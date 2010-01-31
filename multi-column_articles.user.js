@@ -1,6 +1,6 @@
 // Multi-Column Articles Script
-// Version 0.5.1
-// Copyright (c) 2009, Raking Leaves
+// Version 0.5.2
+// Copyright (c) 2010, Raking Leaves
 // Released under the GPL license
 // http://www.gnu.org/copyleft/gpl.html
 //
@@ -779,9 +779,11 @@ function getTextWashPost() {
     var comments = document.getElementById('ArticleCommentsWrapper');
     if (comments) {
         // removing causes Javascript errors,
+        //removeIfNotNull(comments);
         // and making invisible exposes rendering bugs
-        //comments.style.visibility = "hidden";
+        comments.style.visibility = "hidden";
     }
+    removeAll(theText.getElementsByTagName("IFRAME"));
     removeIfNotNull(document.getElementById('articleCopyright'));
     return theText;
 }
@@ -807,6 +809,7 @@ function getTextNYBooks() {
     var page = document.getElementById('page');
     page.setAttribute("style","width:auto;");
     removeIfNotNull(document.getElementById('right-content'));
+    removeAll(getElementsByClass('footer-text',null,null));
     return theText;
 }
 
