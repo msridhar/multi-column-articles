@@ -15,6 +15,9 @@
 //
 // Changelog
 // ---------
+// 0.5.2:
+//   - Upgraded to Hyphenator 2.4.0
+//   - Small fixes for NYBooks, The Atlantic.
 // 0.5.1:
 //   - Small fixes for NYTimes and The Atlantic.
 // 0.5.0:
@@ -989,472 +992,1562 @@ if (theText) {
     window.addEventListener('resize', function(e) { window.location.href = window.location.href; }, true);
 }
 
-// main hyphenation code, from http://code.google.com/p/hyphenator/
-var Hyphenator=(function(){
-	//private properties
-	/************ may be changed ************/
-	var DEBUG=false; // turn DEBUG mode on:true/off:false
-	//var BASEPATH='http://127.0.0.1/~mnater/mnn/hyph/%20working/trunk/';
-	var BASEPATH='http://hyphenator.googlecode.com/svn/trunk/'; // change this if you copied the script to your webspace
-	var SUPPORTEDLANG={'de':true,'en':true,'fr':true, 'nl':true}; //delete languages that you won't use (for better performance)
-	var LANGUAGEHINT='Deutsch: de\tEnglish: en\tFran%E7ais: fr\tNederlands: nl';
-	var PROMPTERSTRINGS={'de':'Die Sprache dieser Webseite konnte nicht automatisch bestimmt werden. Bitte Sprache angeben: \n\n'+LANGUAGEHINT,
-						 'en':'The language of this website could not be determined automatically. Please indicate main language: \n\n'+LANGUAGEHINT,
-						 'fr':'La langue de cette site ne pouvait pas %EAtre d%E9termin%E9e automatiquement. Veuillez indiquer une langue: \n\n'+LANGUAGEHINT,
-						 'nl':'De taal van deze website kan niet automatisch worden bepaald. Geef de hoofdtaal op: \n\n'+LANGUAGEHINT};
-	
-	/************ don't change! ************/
-	var DONTHYPHENATE={'script':true,'code':true,'pre':true,'img':true,'br':true,'samp':true,'kbd':true,'var':true,'abbr':true,'acronym':true,'sub':true,'sup':true,'button':true,'option':true,'label':true};
-	var hyphenation={};
-	var enableRemoteLoading=true;
-	var hyphenateclass='hyphenate'; // the CSS-Classname of Elements that should be hyphenated eg. <p class="hyphenate">Text</p>
-	var hyphen=String.fromCharCode(173); // the hyphen, defaults to &shy; Change by Hyphenator.setHyphenChar(c);
-	var min=6; // only hyphanete words longer then or equal to 'min'. Change by Hyphenator.setMinWordLength(n);
-	var bookmarklet=false;
-	var patternsloaded={}; // this is set when the patterns are loaded
-	var preparestate=0; //0: not initialized, 1: loading patterns, 2: ready
-	var mainlanguage=null;
-	var url='(\\w*:\/\/)((\\w*:)?(\\w*)@)?([\\w\.]*)?(:\\d*)?(\/[\\w#!:.?+=&%@!\-]*)*';
-	var urlRE=new RegExp(url,'i');
-	
-	/************ UA related ************/
-	var zerowidthspace='';
-	// The zerowidthspace is inserted after a '-' in compound words
-	// like this, Firefox and IE will break after '-' if necessary
-	function _createZeroWidthSpace() {
-		var ua=navigator.userAgent.toLowerCase();
-		if(ua.indexOf('firefox')!=-1 || ua.indexOf('msie 7')!=-1) {
-			zerowidthspace=String.fromCharCode(8203); //Unicode zero width space
-		} else if(ua.indexOf('msie 6')!=-1) {
-			zerowidthspace='';
-		}
-	}
-	
-	// checks if the script runs as a Bookmarklet
-	function _checkIfBookmarklet() {
-		var loc=null;
-		var jsArray = document.getElementsByTagName('script');
-		for(var i=0, l=jsArray.length; i<l; i++) {
-			if(!!jsArray[i].getAttribute('src')) {
-				loc=jsArray[i].getAttribute('src');
-			}
-			if(!loc) {
-				continue;
-			} else if(loc.indexOf('Hyphenator.js?bm=true')!=-1) {
-				bookmarklet=true;
-			}
-		}
-	};
-    
-	function _log(msg) {
-	   if(window.console) {
-	       window.console.log(msg); //Safari
-	   } else if(window.opera) { 
-	       window.opera.postError(msg);
-	   }  else {
-	       //alert(msg);
-	   }
-	}
-		
-	//private methods	
-	/************ Language related methods ************/
-	// looks for a language for the site. If there is no
-	// hint in the html, ask the user!
-	function _autoSetMainLanguage() {
-		var el=document.getElementsByTagName('html')[0];
-		mainlanguage=_getLang(el);
-		if(!mainlanguage) {
-			var m=document.getElementsByTagName('meta');
-			for(var i=0; i<m.length; i++) {
-				//<meta http-equiv="content-language" content="xy">	
-				if(!!m[i].getAttribute('http-equiv') && (m[i].getAttribute('http-equiv')=='content-language')) {
-					mainlanguage = m[i].getAttribute('content').substring(0,2);
-				}
-				//<meta name="DC.Language" content="xy">
-				if(!!m[i].getAttribute('name') && (m[i].getAttribute('name')=='DC.Language')) {
-					mainlanguage = m[i].getAttribute('content').substring(0,2);
-				}			
-				//<meta name="language" content="xy">
-				if(!!m[i].getAttribute('name') && (m[i].getAttribute('name')=='language')) {
-					mainlanguage = m[i].getAttribute('content').substring(0,2);
-				}
-			}
-		}
-		if(!mainlanguage) {
-			var text='';
-			var ul=(navigator.language)?navigator.language:navigator.userLanguage;
-			ul=ul.substring(0,2);
-			if(SUPPORTEDLANG[ul]) {
-				text=PROMPTERSTRINGS[ul];
-			} else {
-				text=PROMPTERSTRINGS.en;
-			}
-			var lang=window.prompt(unescape(text), ul);
-			if(SUPPORTEDLANG[lang]) {
-				mainlanguage = lang;
-			}
-		}
-	};
+﻿/*!
+ *  Hyphenator 2.4.0 - client side hyphenation for webbrowsers
+ *  Copyright (C) 2009  Mathias Nater, Zürich (mathias at mnn dot ch)
+ *  Project and Source hosted on http://code.google.com/p/hyphenator/
+ * 
+ *  This JavaScript code is free software: you can redistribute
+ *  it and/or modify it under the terms of the GNU Lesser
+ *  General Public License (GNU LGPL) as published by the Free Software
+ *  Foundation, either version 3 of the License, or (at your option)
+ *  any later version.  The code is distributed WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS
+ *  FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+ *
+ *  As additional permission under GNU GPL version 3 section 7, you
+ *  may distribute non-source (e.g., minimized or compacted) forms of
+ *  that code without the copy of the GNU GPL normally required by
+ *  section 4, provided you include this license notice and a URL
+ *  through which recipients can access the Corresponding Source.
+ */
+ 
+/* 
+ *  Comments are jsdoctoolkit formatted. See jsdoctoolkit.org
+ */
+ 
+/* The following comment is for JSLint: */
+/*global window, ActiveXObject, unescape */
+/*jslint browser: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: true, undef: true, white: true, indent: 4*/
 
-    // gets the lang for the given Element
-    // if not set, use the mainlanguage of the hole site
-	function _getLang(el) {
-		if(!!el.getAttribute('lang')) {
-			return el.getAttribute('lang').substring(0,2);
+/**
+ * @fileOverview
+ * A script that does hyphenation in (X)HTML files
+ * @author Mathias Nater, <a href = "mailto:mathias@mnn.ch">mathias@mnn.ch</a>
+ * @version 2.4.0
+  */
+
+/**
+ * @constructor
+ * @description Provides all functionality to do hyphenation, except the patterns that are loaded
+ * externally.
+ * @namespace Holds all methods and properties
+ * @example
+ * &lt;script src = "Hyphenator.js" type = "text/javascript"&gt;&lt;/script&gt;
+ * &lt;script type = "text/javascript"&gt;
+ *   Hyphenator.run();
+ * &lt;/script&gt;
+ */
+var Hyphenator = (function () {
+
+
+	/**
+	 * @name Hyphenator-languageHint
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string to be displayed in a prompt if the language can't be guessed.
+	 * If you add hyphenation patterns change this string.
+	 * Internally, this string is used to define languages that are supported by Hyphenator.
+	 * @see Hyphenator-supportedLang
+	 * @type string
+	 * @private
+	 * @see Hyphenator-autoSetMainLanguage
+	 */
+	var languageHint = 'cs, da, bn, de, en, es, fi, fr, gu, hi, hu, it, kn, ml, nl, or, pa, pl, pt, ru, sv, ta, te, tr, uk',
+
+	/**
+	 * @name Hyphenator-supportedLang
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A generated key-value object that stores supported languages.
+	 * The languages are retrieved from {@link Hyphenator-languageHint}.
+	 * @type object
+	 * @private
+	 * @example
+	 * Check if language lang is supported:
+	 * if (supportedLang[lang])
+	 */
+	supportedLang = (function () {
+		var k, i = 0, a = languageHint.split(', '), r = {};
+		while (!!(k = a[i++])) {
+			r[k] = true;
+		}
+		return r;
+	}()),
+
+	/**
+	 * @name Hyphenator-prompterStrings
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A key-value object holding the strings to be displayed if the language can't be guessed
+	 * If you add hyphenation patterns change this string.
+	 * @type object
+	 * @private
+	 * @see Hyphenator-autoSetMainLanguage
+	 */	
+	prompterStrings = {
+		'cs': 'Jazyk této internetové stránky nebyl automaticky rozpoznán. Určete prosím její jazyk:',
+		'da': 'Denne websides sprog kunne ikke bestemmes. Angiv venligst sprog:',
+		'de': 'Die Sprache dieser Webseite konnte nicht automatisch bestimmt werden. Bitte Sprache angeben:',
+		'en': 'The language of this website could not be determined automatically. Please indicate the main language:',
+		'es': 'El idioma del sitio no pudo determinarse autom%E1ticamente. Por favor, indique el idioma principal:',
+		'fi': 'Sivun kielt%E4 ei tunnistettu automaattisesti. M%E4%E4rit%E4 sivun p%E4%E4kieli:',
+		'fr': 'La langue de ce site n%u2019a pas pu %EAtre d%E9termin%E9e automatiquement. Veuillez indiquer une langue, s.v.p.%A0:',
+		'hu': 'A weboldal nyelvét nem sikerült automatikusan megállapítani. Kérem adja meg a nyelvet:',
+		'it': 'Lingua del sito sconosciuta. Indicare una lingua, per favore:',
+		'ml': 'ഈ വെ%u0D2C%u0D4D%u200Cസൈറ്റിന്റെ ഭാഷ കണ്ടുപിടിയ്ക്കാ%u0D28%u0D4D%u200D കഴിഞ്ഞില്ല. ഭാഷ ഏതാണെന്നു തിരഞ്ഞെടുക്കുക:',
+		'nl': 'De taal van deze website kan niet automatisch worden bepaald. Geef de hoofdtaal op:',
+		'pt': 'A língua deste site não pôde ser determinada automaticamente. Por favor indique a língua principal:',
+		'ru': 'Язык этого сайта не может быть определен автоматически. Пожалуйста укажите язык:',
+		'sv': 'Spr%E5ket p%E5 den h%E4r webbplatsen kunde inte avg%F6ras automatiskt. V%E4nligen ange:',
+		'tr': 'Bu web sitesinin dilini otomatik olarak tespit edilememiştir. Lütfen ana dili gösterir:',
+		'uk': 'Мова цього веб-сайту не може бути визначена автоматично. Будь ласка, вкажіть головну мову:'
+	},
+	
+	/**
+	 * @name Hyphenator-basePath
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string storing the basepath from where Hyphenator.js was loaded.
+	 * This is used to load the patternfiles.
+	 * The basepath is determined dynamically by searching all script-tags for Hyphenator.js
+	 * If the path cannot be determined http://hyphenator.googlecode.com/svn/trunk/ is used as fallback.
+	 * @type string
+	 * @private
+	 * @see Hyphenator-loadPatterns
+	 */
+	basePath = (function () {
+		var s = document.getElementsByTagName('script'), i = 0, p, src, t;
+		while (!!(t = s[i++])) {
+			if (!t.src) {
+				continue;
+			}
+			src = t.src;
+			p = src.indexOf('Hyphenator.js');
+			if (p !== -1) {
+				return src.substring(0, p);
+			}
+		}
+		return 'http://hyphenator.googlecode.com/svn/trunk/';
+	}()),
+
+	/**
+	 * @name Hyphenator-isLocal
+	 * @fieldOf Hyphenator
+	 * @description
+	 * isLocal is true, if Hyphenator is loaded from the same domain, as the webpage, but false, if
+	 * it's loaded from an external source (i.e. directly from google.code)
+	 */
+	isLocal = (function () {
+		var re = false;
+		if (window.location.href.indexOf(basePath) !== -1) {
+			re = true;
+		}
+		return re;
+	}()),
+	
+	/**
+	 * @name Hyphenator-documentLoaded
+	 * @fieldOf Hyphenator
+	 * @description
+	 * documentLoaded is true, when the DOM has been loaded. This is set by runOnContentLoaded
+	 */
+	documentLoaded = false,
+	
+	/**
+	 * @name Hyphenator-dontHyphenate
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A key-value object containing all html-tags whose content should not be hyphenated
+	 * @type object
+	 * @private
+	 * @see Hyphenator-hyphenateElement
+	 */
+	dontHyphenate = {'script': true, 'code': true, 'pre': true, 'img': true, 'br': true, 'samp': true, 'kbd': true, 'var': true, 'abbr': true, 'acronym': true, 'sub': true, 'sup': true, 'button': true, 'option': true, 'label': true, 'textarea': true},
+
+	/**
+	 * @name Hyphenator-enableCache
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A variable to set if caching is enabled or not
+	 * @type boolean
+	 * @default true
+	 * @private
+	 * @see Hyphenator.config
+	 * @see hyphenateWord
+	 */
+	enableCache = true,
+	
+	/**
+	 * @name Hyphenator-enableRemoteLoading
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A variable to set if pattern files should be loaded remotely or not
+	 * @type boolean
+	 * @default true
+	 * @private
+	 * @see Hyphenator.config
+	 * @see Hyphenator-loadPatterns
+	 */
+	enableRemoteLoading = true,
+	
+	/**
+	 * @name Hyphenator-displayToggleBox
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A variable to set if the togglebox should be displayed or not
+	 * @type boolean
+	 * @default false
+	 * @private
+	 * @see Hyphenator.config
+	 * @see Hyphenator-toggleBox
+	 */
+	displayToggleBox = false,
+	
+	/**
+	 * @name Hyphenator-hyphenateClass
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string containing the css-class-name for the hyphenate class
+	 * @type string
+	 * @default 'hyphenate'
+	 * @private
+	 * @example
+	 * &lt;p class = "hyphenate"&gt;Text&lt;/p&gt;
+	 * @see Hyphenator.config
+	 */
+	hyphenateClass = 'hyphenate',
+
+	/**
+	 * @name Hyphenator-dontHyphenateClass
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string containing the css-class-name for elements that should not be hyphenated
+	 * @type string
+	 * @default 'donthyphenate'
+	 * @private
+	 * @example
+	 * &lt;p class = "donthyphenate"&gt;Text&lt;/p&gt;
+	 * @see Hyphenator.config
+	 */
+	dontHyphenateClass = 'donthyphenate',
+	
+	/**
+	 * @name Hyphenator-min
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A number wich indicates the minimal length of words to hyphenate.
+	 * @type number
+	 * @default 6
+	 * @private
+	 * @see Hyphenator.config
+	 */	
+	min = 6,
+	
+	/**
+	 * @name Hyphenator-isBookmarklet
+	 * @fieldOf Hyphenator
+	 * @description
+	 * Indicates if Hyphanetor runs as bookmarklet or not.
+	 * @type boolean
+	 * @default false
+	 * @private
+	 */	
+	isBookmarklet = (function () {
+		var loc = null, re = false, jsArray = document.getElementsByTagName('script'), i, l;
+		for (i = 0, l = jsArray.length; i < l; i++) {
+			if (!!jsArray[i].getAttribute('src')) {
+				loc = jsArray[i].getAttribute('src');
+			}
+			if (!loc) {
+				continue;
+			} else if (loc.indexOf('Hyphenator.js?bm=true') !== -1) {
+				re = true;
+			}
+		}
+		return re;
+	}()),
+
+	/**
+	 * @name Hyphenator-mainLanguage
+	 * @fieldOf Hyphenator
+	 * @description
+	 * The general language of the document
+	 * @type number
+	 * @private
+	 * @see Hyphenator-autoSetMainLanguage
+	 */	
+	mainLanguage = null,
+
+	/**
+	 * @name Hyphenator-elements
+	 * @fieldOf Hyphenator
+	 * @description
+	 * An array holding all elements that have to be hyphenated. This var is filled by
+	 * {@link Hyphenator-gatherDocumentInfos}
+	 * @type array
+	 * @private
+	 */	
+	elements = [],
+	
+	/**
+	 * @name Hyphenator-exceptions
+	 * @fieldOf Hyphenator
+	 * @description
+	 * An object containing exceptions as comma separated strings for each language.
+	 * When the language-objects are loaded, their exceptions are processed, copied here and then deleted.
+	 * @see Hyphenator-prepareLanguagesObj
+	 * @type object
+	 * @private
+	 */	
+	exceptions = {},
+
+	/**
+	 * @name Hyphenator-docLanguages
+	 * @fieldOf Hyphenator
+	 * @description
+	 * An object holding all languages used in the document. This is filled by
+	 * {@link Hyphenator-gatherDocumentInfos}
+	 * @type object
+	 * @private
+	 */	
+	docLanguages = {},
+
+
+	/**
+	 * @name Hyphenator-state
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A number that inidcates the current state of the script
+	 * 0: not initialized
+	 * 1: loading patterns
+	 * 2: ready
+	 * 3: hyphenation done
+	 * 4: hyphenation removed
+	 * @type number
+	 * @private
+	 */	
+	state = 0,
+
+	/**
+	 * @name Hyphenator-url
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string containing a RegularExpression to match URL's
+	 * @type string
+	 * @private
+	 */	
+	url = '(\\w*:\/\/)?((\\w*:)?(\\w*)@)?((([\\d]{1,3}\\.){3}([\\d]{1,3}))|(([\\w]*\\.)+([\\w]{2,4})))(:\\d*)?(\/[\\w#!:\\.?\\+=&%@!\\-]*)*',
+
+	/**
+	 * @name Hyphenator-mail
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string containing a RegularExpression to match mail-adresses
+	 * @type string
+	 * @private
+	 */	
+	mail = '[\\w-\\.]+@[\\w\\.]+',
+
+	/**
+	 * @name Hyphenator-urlRE
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A RegularExpressions-Object for url- and mail adress matching
+	 * @type object
+	 * @private
+	 */		
+	urlOrMailRE = new RegExp('(' + url + ')|(' + mail + ')', 'i'),
+
+	/**
+	 * @name Hyphenator-zeroWidthSpace
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string that holds a char.
+	 * Depending on the browser, this is the zero with space or an empty string.
+	 * The zeroWidthSpace is inserted after a '-' in compound words, so even FF and IE
+	 * will break after a '-' if necessary.
+	 * zeroWidthSpace is also used to break URLs
+	 * @type string
+	 * @private
+	 */		
+	zeroWidthSpace = (function () {
+		var zws, ua = navigator.userAgent.toLowerCase();
+		if (ua.indexOf('msie 6') === -1) {
+			zws = String.fromCharCode(8203); //Unicode zero width space
+		} else {
+			zws = ''; //IE6 doesn't support zws
+		}
+		return zws;
+	}()),
+	
+	/**
+	 * @name Hyphenator-onHyphenationDone
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A method to be called, when the last element has been hyphenated or the hyphenation has been
+	 * removed from the last element.
+	 * @see Hyphenator.config
+	 * @type function
+	 * @private
+	 */		
+	onHyphenationDone = function () {},
+
+	/**
+	 * @name Hyphenator-onError
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A function that can be called upon an error.
+	 * @see Hyphenator.config
+	 * @type function
+	 * @private
+	 */		
+	onError = function (e) {
+		alert("Hyphenator.js says:\n\nAn Error ocurred:\n" + e.message);
+	},
+
+	/**
+	 * @name Hyphenator-selectorFunction
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A function that has to return a HTMLNodeList of Elements to be hyphenated.
+	 * By default it uses the classname ('hyphenate') to select the elements.
+	 * @see Hyphenator.config
+	 * @type function
+	 * @private
+	 */		
+	selectorFunction = function () {
+		var tmp, el = [], i, l;
+		if (document.getElementsByClassName) {
+			el = document.getElementsByClassName(hyphenateClass);
+		} else {
+			tmp = document.getElementsByTagName('*');
+			l = tmp.length;
+			for (i = 0; i < l; i++)
+			{
+				if (tmp[i].className.indexOf(hyphenateClass) !== -1 && tmp[i].className.indexOf(dontHyphenateClass) === -1) {
+					el.push(tmp[i]);
+				}
+			}
+		}
+		return el;
+	},
+
+	/**
+	 * @name Hyphenator-intermediateState
+	 * @fieldOf Hyphenator
+	 * @description
+	 * The value of style.visibility of the text while it is hyphenated.
+	 * @see Hyphenator.config
+	 * @type string
+	 * @private
+	 */		
+	intermediateState = 'hidden',
+	
+	/**
+	 * @name Hyphenator-hyphen
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string containing the character for in-word-hyphenation
+	 * @type string
+	 * @default the soft hyphen
+	 * @private
+	 * @see Hyphenator.config
+	 */
+	hyphen = String.fromCharCode(173),
+	
+	/**
+	 * @name Hyphenator-urlhyphen
+	 * @fieldOf Hyphenator
+	 * @description
+	 * A string containing the character for url/mail-hyphenation
+	 * @type string
+	 * @default the zero width space
+	 * @private
+	 * @see Hyphenator.config
+	 * @see Hyphenator-zeroWidthSpace
+	 */
+	urlhyphen = zeroWidthSpace,
+	
+	/**
+	 * @name Hyphenator-Expando
+	 * @methodOf Hyphenator
+	 * @description
+	 * This custom object stores data for elements: storing data directly in elements
+	 * (DomElement.customData = foobar;) isn't a good idea. It would lead to conflicts
+	 * in form elements, when the form has a child with name="foobar". Therefore, this
+	 * solution follows the approach of jQuery: the data is stored in an object and
+	 * referenced by a unique attribute of the element. The attribute has a name that 
+	 * is built by the prefix "HyphenatorExpando_" and a random number, so if the very
+	 * very rare case occurs, that there's already an attribute with the same name, a
+	 * simple reload is enough to make it function.
+	 * @private
+	 */		
+	Expando = (function () {
+		var container = {},
+			name = "HyphenatorExpando_" + Math.random(),
+			uuid = 0;
+		return {
+			getDataForElem : function (elem) {
+				return container[elem[name]];
+			},
+			setDataForElem : function (elem, data) {
+				var id;
+				if (elem[name] && elem[name] !== '') {
+					id = elem[name];
+				} else {
+					id = uuid++;
+					elem[name] = id;
+				}
+				container[id] = data;
+			},
+			appendDataForElem : function (elem, data) {
+				var k;
+				for (k in data) {
+					if (data.hasOwnProperty(k)) {
+						container[elem[name]][k] = data[k];
+					}
+				}
+			},
+			delDataOfElem : function (elem) {
+				delete container[elem[name]];
+			}
+		};
+	}()),
+		
+	/*
+	 * runOnContentLoaded is based od jQuery.bindReady()
+	 * see
+	 * jQuery JavaScript Library v1.3.2
+	 * http://jquery.com/
+	 *
+	 * Copyright (c) 2009 John Resig
+	 * Dual licensed under the MIT and GPL licenses.
+	 * http://docs.jquery.com/License
+	 *
+	 * Date: 2009-02-19 17:34:21 -0500 (Thu, 19 Feb 2009)
+	 * Revision: 6246
+	 */
+	/**
+	 * @name Hyphenator-runOnContentLoaded
+	 * @methodOf Hyphenator
+	 * @description
+	 * A crossbrowser solution for the DOMContentLoaded-Event based on jQuery
+	 * <a href = "http://jquery.com/</a>
+	 * @param object the window-object
+	 * @param function-object the function to call onDOMContentLoaded
+	 * @private
+	 */
+	runOnContentLoaded = function (w, f) {
+		var oldonload = w.onload;
+		if (documentLoaded) {
+			f();
+			return;
+		}
+		function init() {
+			if (!documentLoaded) {
+				documentLoaded = true;
+				f();
+			}
+		}
+	
+		// Mozilla, Opera and webkit nightlies currently support this event
+		if (document.addEventListener) {
+			// Use the handy event callback
+			document.addEventListener("DOMContentLoaded", function () {
+				document.removeEventListener("DOMContentLoaded", arguments.callee, false);
+				init();
+			}, false);
+	
+		// If IE event model is used
+		} else if (document.attachEvent) {
+			// ensure firing before onload,
+			// maybe late but safe also for iframes
+			document.attachEvent("onreadystatechange", function () {
+				if (document.readyState === "complete") {
+					document.detachEvent("onreadystatechange", arguments.callee);
+					init();
+				}
+			});
+	
+			// If IE and not an iframe
+			// continually check to see if the document is ready
+			if (document.documentElement.doScroll && window == window.top) {
+				(function () {
+					if (documentLoaded) {
+						return;
+					}
+					try {
+						// If IE is used, use the trick by Diego Perini
+						// http://javascript.nwbox.com/IEContentLoaded/
+						document.documentElement.doScroll("left");
+					} catch (error) {
+						setTimeout(arguments.callee, 0);
+						return;
+					}
+					// and execute any waiting functions
+					f();
+				}());
+			}		
+		}
+		// A fallback to window.onload, that will always work
+		w.onload = function (e) {
+			init();
+			if (typeof oldonload === 'function') {
+				oldonload();
+			}
+		};	
+	},
+
+
+
+	/**
+	 * @name Hyphenator-getLang
+	 * @methodOf Hyphenator
+	 * @description
+	 * Gets the language of an element. If no language is set, it may use the {@link Hyphenator-mainLanguage}.
+	 * @param object The first parameter is an DOM-Element-Object
+	 * @param boolean The second parameter is a boolean to tell if the function should return the {@link Hyphenator-mainLanguage}
+	 * if there's no language found for the element.
+	 * @private
+	 */
+	getLang = function (el, fallback) {
+		if (!!el.getAttribute('lang')) {
+			return el.getAttribute('lang').substring(0, 2).toLowerCase();
 		}
 		// The following doesn't work in IE due to a bug when getAttribute('xml:lang') in a table
-		/*if(!!el.getAttribute('xml:lang')) {
-			return el.getAttribute('xml:lang').substring(0,2);
+		/*if (!!el.getAttribute('xml:lang')) {
+			return el.getAttribute('xml:lang').substring(0, 2);
 		}*/
-		if(mainlanguage) {
-			return mainlanguage;
+		//instead, we have to do this (thanks to borgzor):
+		try {
+			if (!!el.getAttribute('xml:lang')) {
+				return el.getAttribute('xml:lang').substring(0, 2).toLowerCase();
+			}
+		} catch (ex) {}
+		if (el.tagName !== 'HTML') {
+			return getLang(el.parentNode, true);
+		}
+		if (fallback) {
+			return mainLanguage;
 		}
 		return null;
-	};
+	},
+	
+	/**
+	 * @name Hyphenator-autoSetMainLanguage
+	 * @methodOf Hyphenator
+	 * @description
+	 * Retrieves the language of the document from the DOM.
+	 * The function looks in the following places:
+	 * <ul>
+	 * <li>lang-attribute in the html-tag</li>
+	 * <li>&lt;meta http-equiv = "content-language" content = "xy" /&gt;</li>
+	 * <li>&lt;meta name = "DC.Language" content = "xy" /&gt;</li>
+	 * <li>&lt;meta name = "language" content = "xy" /&gt;</li>
+	 * </li>
+	 * If nothing can be found a prompt using {@link Hyphenator-languageHint} and {@link Hyphenator-prompterStrings} is displayed.
+	 * If the retrieved language is in the object {@link Hyphenator-supportedLang} it is copied to {@link Hyphenator-mainLanguage}
+	 * @private
+	 */		
+	autoSetMainLanguage = function () {
+		var el = document.getElementsByTagName('html')[0],
+			m = document.getElementsByTagName('meta'),
+			i, text, lang, e, ul;
+		mainLanguage = getLang(el);
+		if (!mainLanguage) {
+			for (i = 0; i < m.length; i++) {
+				//<meta http-equiv = "content-language" content="xy">	
+				if (!!m[i].getAttribute('http-equiv') && (m[i].getAttribute('http-equiv') === 'content-language')) {
+					mainLanguage = m[i].getAttribute('content').substring(0, 2).toLowerCase();
+				}
+				//<meta name = "DC.Language" content="xy">
+				if (!!m[i].getAttribute('name') && (m[i].getAttribute('name') === 'DC.language')) {
+					mainLanguage = m[i].getAttribute('content').substring(0, 2).toLowerCase();
+				}			
+				//<meta name = "language" content = "xy">
+				if (!!m[i].getAttribute('name') && (m[i].getAttribute('name') === 'language')) {
+					mainLanguage = m[i].getAttribute('content').substring(0, 2).toLowerCase();
+				}
+			}
+		}
+		if (!mainLanguage) {
+			text = '';
+			ul = navigator.language ? navigator.language : navigator.userLanguage;
+			ul = ul.substring(0, 2);
+			if (prompterStrings.hasOwnProperty(ul)) {
+				text = prompterStrings[ul];
+			} else {
+				text = prompterStrings.en;
+			}
+			text += ' (ISO 639-1)\n\n' + languageHint;
+			lang = window.prompt(unescape(text), ul).toLowerCase();
+			if (supportedLang[lang]) {
+				mainLanguage = lang;
+			} else {
+				e = new Error('The language "' + lang + '" is not yet supported.');
+				throw e;
+			}
+		}
+	},
+    
+	/**
+	 * @name Hyphenator-gatherDocumentInfos
+	 * @methodOf Hyphenator
+	 * @description
+	 * This method runs through the DOM and executes the process()-function on:
+	 * - every node returned by the {@link Hyphenator-selectorFunction}.
+	 * The process()-function copies the element to the elements-variable, sets its visibility
+	 * to intermediateState, retrieves its language and recursivly descends the DOM-tree until
+	 * the child-Nodes aren't of type 1
+	 * @private
+	 */		
+	gatherDocumentInfos = function () {
+		var elToProcess, tmp, i = 0,
+		process = function (el, hide, lang) {
+			var n, i = 0, hyphenatorSettings = {};
+			if (hide && intermediateState === 'hidden') {
+				if (!!el.getAttribute('style')) {
+					hyphenatorSettings.hasOwnStyle = true;
+				} else {
+					hyphenatorSettings.hasOwnStyle = false;					
+				}
+				hyphenatorSettings.isHidden = true;
+				el.style.visibility = 'hidden';
+			}
+			if (el.lang && typeof(el.lang) === 'string') {
+				hyphenatorSettings.language = el.lang.toLowerCase(); //copy attribute-lang to internal lang
+			} else if (lang) {
+				hyphenatorSettings.language = lang.toLowerCase();
+			} else {
+				hyphenatorSettings.language = getLang(el, true);
+			}
+			lang = hyphenatorSettings.language;
+			if (supportedLang[lang]) {
+				docLanguages[lang] = true;
+			} else {
+				onError(new Error('Language ' + lang + ' is not yet supported.'));
+			}
+			Expando.setDataForElem(el, hyphenatorSettings);
+			elements.push(el);
+			while (!!(n = el.childNodes[i++])) {
+				if (n.nodeType === 1 && !dontHyphenate[n.nodeName.toLowerCase()] &&
+					n.className.indexOf(dontHyphenateClass) === -1 && !(n in elToProcess)) {
+					process(n, false, lang);
+				}
+			}
+		};
+		if (Hyphenator.isBookmarklet()) {
+			elToProcess = document.getElementsByTagName('body')[0];
+			process(elToProcess, false, mainLanguage);
+		} else {
+			elToProcess = selectorFunction();
+			while (!!(tmp = elToProcess[i++]))
+			{
+				process(tmp, true);
+			}			
+		}
+		if (!Hyphenator.languages.hasOwnProperty(mainLanguage)) {
+			docLanguages[mainLanguage] = true;
+		} else if (!Hyphenator.languages[mainLanguage].prepared) {
+			docLanguages[mainLanguage] = true;
+		}
+		if (elements.length > 0) {
+			Expando.appendDataForElem(elements[elements.length - 1], {isLast : true});
+		}
+	},
+		 
+	/**
+	 * @name Hyphenator-convertPatterns
+	 * @methodOf Hyphenator
+	 * @description
+	 * Converts the patterns from string '_a6' to object '_a':'_a6'.
+	 * The result is stored in the {@link Hyphenator-patterns}-object.
+	 * @private
+	 * @param string the language whose patterns shall be converted
+	 */		
+	convertPatterns = function (lang) {
+		var plen, anfang, pats, pat, key, tmp = {};
+		pats = Hyphenator.languages[lang].patterns;
+		for (plen in pats) {
+			if (pats.hasOwnProperty(plen)) {
+				plen = parseInt(plen, 10);
+				anfang = 0;
+				while (!!(pat = pats[plen].substr(anfang, plen))) {
+					key = pat.replace(/\d/g, '');
+					tmp[key] = pat;
+					anfang += plen;
+				}
+			}
+		}
+		Hyphenator.languages[lang].patterns = tmp;
+		Hyphenator.languages[lang].patternsConverted = true;
+	},
 
-	/************ pattern (loading) related methods ************/
-	// Loads the hyphenation-patterns for specific languages
-	// by adding a new <script>-Element
-	// Why not using AJAX? Because it is restricted to load data
-	// only from the same site - so the Bookmarklet won't work...
-	function _loadPatterns(lang) {
-		if(DEBUG)
-			_log("load patterns "+lang);
-		if(SUPPORTEDLANG[lang] && !patternsloaded[lang]) {
-	        var url=BASEPATH+'patterns/'+lang+'.js';
-	        if(lang=="de") {
-	        	url=BASEPATH+'patterns/newpatterns/de.js';
-	        }
+	/**
+	 * @name Hyphenator-convertExceptionsToObject
+	 * @methodOf Hyphenator
+	 * @description
+	 * Converts a list of comma seprated exceptions to an object:
+	 * 'Fortran,Hy-phen-a-tion' -> {'Fortran':'Fortran','Hyphenation':'Hy-phen-a-tion'}
+	 * @private
+	 * @param string a comma separated string of exceptions (without spaces)
+	 */		
+	convertExceptionsToObject = function (exc) {
+		var w = exc.split(', '),
+			r = {},
+			i, l, key;
+		for (i = 0, l = w.length; i < l; i++) {
+			key = w[i].replace(/-/g, '');
+			if (!r.hasOwnProperty(key)) {
+				r[key] = w[i];
+			}
+		}
+		return r;
+	},
+	
+	/**
+	 * @name Hyphenator-loadPatterns
+	 * @methodOf Hyphenator
+	 * @description
+	 * Adds a &lt;script&gt;-Tag to the DOM to load an externeal .js-file containing patterns and settings for the given language.
+	 * If the iven language is not in the {@link Hyphenator-supportedLang}-Object it returns.
+	 * One may ask why we are not using AJAX to load the patterns. The XMLHttpRequest-Object 
+	 * has a same-origin-policy. This makes the isBookmarklet-functionality impossible.
+	 * @param string The language to load the patterns for
+	 * @private
+	 * @see Hyphenator-basePath
+	 */
+	loadPatterns = function (lang) {
+		var url, xhr, head, script;
+		if (supportedLang[lang] && !Hyphenator.languages[lang]) {
+	        url = basePath + 'patterns/' + lang + '.js';
 		} else {
 			return;
 		}
-		if(document.createElement) {
-			var head=document.getElementsByTagName('head').item(0);
-			var script=document.createElement('script');
-			script.src=url;
-			script.type='text/javascript';
+		if (isLocal && !isBookmarklet) {
+			//check if 'url' is available:
+			xhr = null;
+			if (typeof XMLHttpRequest !== 'undefined') {
+				xhr = new XMLHttpRequest();
+			}
+			if (!xhr) {
+				try {
+					xhr  = new ActiveXObject("Msxml2.XMLHTTP");
+				} catch (e) {
+					xhr  = null;
+				}
+			}
+			if (xhr) {
+				xhr.open('HEAD', url, false);
+				xhr.setRequestHeader('Cache-Control', 'no-cache');
+				xhr.send(null);
+				if (xhr.status === 404) {
+					onError(new Error('Could not load\n' + url));
+					delete docLanguages[lang];
+					return;
+				}
+			}
+		}
+		if (document.createElement) {
+			head = document.getElementsByTagName('head').item(0);
+			script = document.createElement('script');
+			script.src = url;
+			script.type = 'text/javascript';
 			head.appendChild(script);
 		}
-		if(DEBUG)
-			_log('Loading '+url);
-	};
-
-	/************ hyphenate helper methods ************/
-	// walk throug the document and do the job
-	function _runHyphenation() {
-		var body=document.getElementsByTagName('body')[0];
-		if(Hyphenator.isBookmarklet()) {
-			Hyphenator.hyphenateElement(body);
-		} else {
-			if(document.getElementsByClassName) {
-				var elements=document.getElementsByClassName(hyphenateclass);
-				for(var i=0, l=elements.length; i<l; i++)
-				{
-					Hyphenator.hyphenateElement(elements[i]);
-				}
-			} else {
-				var elements=body.getElementsByTagName('*');
-				for(var i=0, l=elements.length; i<l; i++)
-				{
-					if(elements[i].className.indexOf(hyphenateclass)!=-1) {
-						Hyphenator.hyphenateElement(elements[i]);
-					}
-				}
-			}
-		}
-	};
+	},
 	
-	//Run automatically when the DOM is loaded
-	/*  
-	 *  Code by Stuart Langridge
-	 *  http://www.kryogenix.org/days/2007/09/26/shortloaded
-	 *  based on code by Dean Edwards and John Resig
-	 *  http://dean.edwards.name/weblog/2006/06/again/
-	 *	http://javascript.nwbox.com/ContentLoaded/
-	 *
-	 */
-	function _runOnContentLoaded() {
-		(function(i) {
-			var u =navigator.userAgent;
-			var e=/*@cc_on!@*/false;
-			var st =setTimeout;
-			if(/webkit/i.test(u)) {
-				st(function(){
-						var dr=document.readyState;
-						if(dr=="loaded"||dr=="complete") {
-							i()
-						} else {
-							st(arguments.callee,10);
-						}
-					},
-				10);
+	/**
+	 * @name Hyphenator-prepareLanguagesObj
+	 * @methodOf Hyphenator
+	 * @description
+	 * Adds a cache to each language and converts the exceptions-list to an object.
+	 * @private
+	 * @param string the language ob the lang-obj
+	 */		
+	prepareLanguagesObj = function (lang) {
+		var lo = Hyphenator.languages[lang], wrd;
+		if (!lo.prepared) {	
+			if (enableCache) {
+				lo.cache = {};
 			}
-			else if((/mozilla/i.test(u)&&!/(compati)/.test(u)) || (/opera/i.test(u))) {
-				document.addEventListener("DOMContentLoaded",i,false);
-			} else if(e) {
-				(function(){
-					var t=document.createElement('doc:rdy');
-					try{
-						t.doScroll('left');
-						i();
-						t=null;
-					} catch(e) {
-						st(arguments.callee,0);
-					}
-				})();
+			if (lo.hasOwnProperty('exceptions')) {
+				Hyphenator.addExceptions(lang, lo.exceptions);
+				delete lo.exceptions;
+			}
+			if (exceptions.hasOwnProperty('global')) {
+				if (exceptions.hasOwnProperty(lang)) {
+					exceptions[lang] += ', ' + exceptions.global;
+				} else {
+					exceptions[lang] = exceptions.global;
+				}
+			}
+			if (exceptions.hasOwnProperty(lang)) {
+				lo.exceptions = convertExceptionsToObject(exceptions[lang]);
+				delete exceptions[lang];
 			} else {
-				window.onload=i;
+				lo.exceptions = {};
 			}
-		})(Hyphenator.hyphenateDocument);
-	};
-
-
-	/************ init methods ************/
-	function _autoinit() {
-		for(var lang in SUPPORTEDLANG) {
-			patternsloaded[lang]=false;
+			convertPatterns(lang);
+			wrd = '[\\w' + lo.specialChars + '@' + String.fromCharCode(173) + '-]{' + min + ',}';
+			lo.genRegExp = new RegExp('(' + url + ')|(' + mail + ')|(' + wrd + ')', 'gi');
+			lo.prepared = true;
 		}
-		_autoSetMainLanguage();
-		_createZeroWidthSpace();
-		_checkIfBookmarklet();
-	};
-	_autoinit();
-	return {
-		//public properties
-	    leftmin:{},  // How many chars can be on the old line at minimum. This is set by the patternfile
-        rightmin:{}, // How many chars can be on the new line at minimum. This is set by the patternfile
-        shortestPattern:{}, // this is set by the patternfile
-        longestPattern:{}, // this is set by the patternfile
-        specialChars:{}, // Language specific chars such as Ã©Ã Ã¢Ã§ etc. This is set by the patternfile
-		patterns:{}, // patterns are stored in here, when they have finished loading
-		
-		//public methods
-		run: function() {
-			_runOnContentLoaded();
-		},
-		addExceptions: function(words) { //words is a comma separated string of words
-		 	var w=words.split(',');
-		 	for(var i=0, l=w.length; i<l; i++) {
-		 		var key=w[i].replace(/-/g,'');
-				if(!hyphenation[key]) {
-					hyphenation[key]=w[i];
+	},
+	
+	/**
+	 * @name Hyphenator-prepare
+	 * @methodOf Hyphenator
+	 * @description
+	 * This funtion prepares the Hyphenator-Object: If RemoteLoading is turned off, it assumes
+	 * that the patternfiles are loaded, all conversions are made and the callback is called.
+	 * If RemoteLoading is on (default), it loads the pattern files and waits until they are loaded,
+	 * by repeatedly checking Hyphenator.languages. If a patterfile is loaded the patterns are
+	 * converted to their object style and the lang-object extended.
+	 * Finally the callback is called.
+	 * @param function-object callback to call, when all patterns are loaded
+	 * @private
+	 */
+	prepare = function (callback) {
+		var lang, docLangEmpty = true, interval;
+		if (!enableRemoteLoading) {
+			for (lang in Hyphenator.languages) {
+				if (Hyphenator.languages.hasOwnProperty(lang)) {
+					prepareLanguagesObj(lang);
 				}
 			}
-		},	
-		setClassName: function(str) {
-            hyphenateclass=str || 'hyphenate';
-		},
-		setMinWordLength: function(mymin) {
-            min=mymin || 6;
-		},
-		setHyphenChar: function(str) {
-            hyphen=str || String.fromCharCode(173);
-		},
-		setRemoteLoading: function(bool) {
-			enableRemoteLoading=bool;
-		},
-		isPatternLoaded: function(lang) {
-			return patternsloaded[lang];
-		},
-		updatePatternsLoadState:function(lang,bool) {
-			patternsloaded[lang]=bool;
-		},
-		isBookmarklet: function() {
-			return bookmarklet;
-		},
-		prepare: function() {
-        // get all languages that are used and preload the patterns
-			if(DEBUG)
-				_log("preparing-state: 1 (loading)");
-			preparestate=1;
-			var doclanguages={};
-			doclanguages[mainlanguage]=true;
-			var elements=document.getElementsByTagName('body')[0].getElementsByTagName('*');
-			var lang=null;
-			for(var i=0, l=elements.length; i<l; i++) {
-				if(lang=_getLang(elements[i])) {
-					if(SUPPORTEDLANG[lang]) {
-						doclanguages[lang]=true;
-					} else {
-						//alert('Language '+lang+' is not yet supported.');
-					}
-				}
+			state = 2;
+			callback();
+			return;
+		}
+		// get all languages that are used and preload the patterns
+		state = 1;
+		for (lang in docLanguages) {
+			if (docLanguages.hasOwnProperty(lang)) {
+				loadPatterns(lang);
+				docLangEmpty = false;
 			}
-			if(DEBUG) {
-				for(var l in doclanguages) {
-					_log("language found: "+l);
-				}
-			}
-			for(lang in doclanguages) {
-				_loadPatterns(lang);
-			}
-			// wait until they are loaded
-			interval=window.setInterval(function(){
-				finishedLoading=false;
-				for(lang in doclanguages) {
-					if(!patternsloaded[lang]) {
-						finishedLoading=false;
+		}
+		if (docLangEmpty) {
+			state = 2;
+			callback();
+			return;
+		}
+		// wait until they are loaded
+		interval = window.setInterval(function () {
+			var finishedLoading = false, lang;
+			for (lang in docLanguages) {
+				if (docLanguages.hasOwnProperty(lang)) {
+					if (!Hyphenator.languages[lang]) {
+						finishedLoading = false;
 						break;
 					} else {
-						finishedLoading=true;
+						finishedLoading = true;
+						delete docLanguages[lang];
+						//do conversion while other patterns are loading:
+						prepareLanguagesObj(lang);		
 					}
 				}
-				if(finishedLoading) {
-					window.clearInterval(interval);
-					preparestate=2;
-					if(DEBUG)
-						_log("preparing-state: 2 (loaded)");
-				}
-			},100);
+			}
+			if (finishedLoading) {
+				window.clearInterval(interval);
+				state = 2;
+				callback();
+			}
+		}, 100);
+	},
 
-		},
-		hyphenateDocument: function() {
-			if(DEBUG)
-				_log("hyphenateDocument");
-			if(preparestate!=2 && enableRemoteLoading) {
-				if(preparestate==0) {
-					Hyphenator.prepare();               // load all language patterns that are used
-				}
-				var interval=window.setInterval(function(){
-					if(preparestate==2) {
-						window.clearInterval(interval);
-						_runHyphenation();
-					}
-				},10);
+	/**
+	 * @name Hyphenator-switchToggleBox
+	 * @methodOf Hyphenator
+	 * @description
+	 * Creates or hides the toggleBox: a small button to turn off/on hyphenation on a page.
+	 * @param boolean true when hyphenation is on, false when it's off
+	 * @see Hyphenator.config
+	 * @private
+	 */		
+	toggleBox = function (s) {
+		var myBox, bdy, myIdAttribute, myTextNode, myClassAttribute;
+		if (!!(myBox = document.getElementById('HyphenatorToggleBox'))) {
+			if (s) {
+				myBox.firstChild.data = 'Hy-phe-na-ti-on';
 			} else {
-				_runHyphenation();
+				myBox.firstChild.data = 'Hyphenation';
 			}
-		},
-		hyphenateElement : function(el,lang) {
-        // if there is text hyphenate each word
-        // if there are other elements, go deeper!
-		// maybe this could be faster, somehow!
-			if(DEBUG)
-				_log("hyphenateElement: "+el.tagName+" id: "+el.id);
-			if(!lang) {
-				if(DEBUG)
-					_log("lang not set");
-				var lang=_getLang(el);
-				if(DEBUG)
-					_log("set lang to "+lang);
-			} else {
-				if(DEBUG)
-					_log("got lang from parent ("+lang+")");
-				var newlang=_getLang(el);
-				if(newlang!=lang) {
-					var lang=newlang;
-					if(DEBUG)
-						_log("but element has own lang ("+lang+")");
-				}
+		} else {
+			bdy = document.getElementsByTagName('body')[0];
+			myBox = document.createElement('div');
+			myIdAttribute = document.createAttribute('id');
+			myIdAttribute.nodeValue = 'HyphenatorToggleBox';
+			myClassAttribute = document.createAttribute('class');
+			myClassAttribute.nodeValue = dontHyphenateClass;
+			myTextNode = document.createTextNode('Hy-phe-na-ti-on');
+			myBox.appendChild(myTextNode);
+			myBox.setAttributeNode(myIdAttribute);
+			myBox.setAttributeNode(myClassAttribute);
+			myBox.onclick =  Hyphenator.toggleHyphenation;
+			myBox.style.position = 'absolute';
+			myBox.style.top = '0px';
+			myBox.style.right = '0px';
+			myBox.style.margin = '0';
+			myBox.style.backgroundColor = '#AAAAAA';
+			myBox.style.color = '#FFFFFF';
+			myBox.style.font = '6pt Arial';
+			myBox.style.letterSpacing = '0.2em';
+			myBox.style.padding = '3px';
+			myBox.style.cursor = 'pointer';
+			myBox.style.WebkitBorderBottomLeftRadius = '4px';
+			myBox.style.MozBorderRadiusBottomleft = '4px';
+			bdy.appendChild(myBox);
+		}
+	},
+
+	/**
+	 * @name Hyphenator-hyphenateWord
+	 * @methodOf Hyphenator
+	 * @description
+	 * This function is the heart of Hyphenator.js. It returns a hyphenated word.
+	 *
+	 * If there's already a {@link Hyphenator-hypen} in the word, the word is returned as it is.
+	 * If the word is in the exceptions list or in the cache, it is retrieved from it.
+	 * If there's a '-' put a zeroWidthSpace after the '-' and hyphenate the parts.
+	 * @param string The language of the word
+	 * @param string The word
+	 * @returns string The hyphenated word
+	 * @public
+	 */	
+	hyphenateWord = function (lang, word) {
+		var lo = Hyphenator.languages[lang],
+			parts, i, l, w, wl, s, hypos, p, maxwins, win, pat = false, patk, patl, c, digits, z, numb3rs, n, inserted, hyphenatedword;
+		if (word === '') {
+			return '';
+		}
+		if (word.indexOf(hyphen) !== -1) {
+			//word already contains shy; -> leave at it is!
+			return word;
+		}
+		if (enableCache && lo.cache.hasOwnProperty(word)) { //the word is in the cache
+			return lo.cache[word];
+		}
+		if (lo.exceptions.hasOwnProperty(word)) { //the word is in the exceptions list
+			return lo.exceptions[word].replace(/-/g, hyphen);
+		}
+		if (word.indexOf('-') !== -1) {
+			//word contains '-' -> hyphenate the parts separated with '-'
+			parts = word.split('-');
+			for (i = 0, l = parts.length; i < l; i++) {
+				parts[i] = hyphenateWord(lang, parts[i]);
 			}
-			if(DEBUG)
-				_log("language: "+lang);
-			var wrd='[\\w'+Hyphenator.specialChars[lang]+'Â­-]{'+min+',}';
-			var wrdRE=new RegExp(wrd,'i');
-			function __hyphenate(word) {
-				if(urlRE.test(word)) {
-					return Hyphenator.hyphenateURL(word);
+			return parts.join('-');
+		}
+		//finally the core hyphenation algorithm
+		w = '_' + word + '_';
+		wl = w.length;
+		s = w.split('');
+		w = w.toLowerCase();
+		hypos = [];
+		numb3rs = {'0': true, '1': true, '2': true, '3': true, '4': true, '5': true, '6': true, '7': true, '8': true, '9': true}; //check for member is faster then isFinite()
+		n = wl - lo.shortestPattern;
+		for (p = 0; p <= n; p++) {
+			maxwins = Math.min((wl - p), lo.longestPattern);
+			for (win = lo.shortestPattern; win <= maxwins; win++) {
+				if (lo.patterns.hasOwnProperty(patk = w.substr(p, win))) {
+					pat = lo.patterns[patk];
 				} else {
-					return Hyphenator.hyphenateWord(lang,word);
+					continue;
 				}
-			}
-			var genRegExp=new RegExp('('+url+')|('+wrd+')','gi');
-            for(var i=0; (n=el.childNodes[i]); i++) {
-				if(n.nodeType==3 && n.data.length>=min) { //type 3=#text -> hyphenate!
-                    n.data=n.data.replace(genRegExp,__hyphenate);
-                    if(DEBUG)
-						_log("hyphenation done for: "+el.tagName+" id: "+el.id);
-                } else if(n.nodeType==1 && !DONTHYPHENATE[n.nodeName.toLowerCase()]) {			//typ 1=element node -> recursion
-                    if(DEBUG)
-						_log("traversing: "+n.nodeName.toLowerCase());
-                    Hyphenator.hyphenateElement(n,lang);
-                }
-            }
-            el.style.visibility='visible';
-        },
-		hyphenateWord    : function(lang,word) {
-			if(word=='') {
-				return '';
-			}
-			if(word.indexOf('Â­')!=-1) { //this String only contains the unicode char 'Soft Hyphen' wich may not be visible in some editors!
-				//word already contains shy; -> leave at it is!
-				return word;
-			}
-			if(hyphen=='&shy;') {
-				hyphen=String.fromCharCode(173);
-			}
-			if(hyphenation[word]) {
-				return hyphenation[word].replace(/-/g,hyphen);
-			}
-			if(word.indexOf('-')!=-1) {
-				//word contains '-' -> put a zerowidthspace after it and hyphenate the parts separated with '-'
-				var parts=word.split('-');
-				for(var i=0, l=parts.length; i<l; i++) {
-					parts[i]=Hyphenator.hyphenateWord(lang,parts[i]);
-				}
-				return parts.join('-'+zerowidthspace);
-			}
-			//finally the core hyphenation algorithm
-			var positions = []; 		//hyphenating points
-			var result = [];			//syllabs
-			var w='_'+word.toLowerCase()+'_';	//mark beginning an end
-			var wl=w.length;
-			var i=wl-2;
-			do {
-				positions[i]=0;
-			} while(i--);
-			var s=wl-1;
-
-			do {
-				var maxl=wl-s;
-				var window=w.substring(s);
-				for(var l=Hyphenator.shortestPattern[lang]; l<=maxl && l<=Hyphenator.longestPattern[lang]; l++) {
-					var part=window.substring(0,l);	//window from position s with length l
-					var values=null;
-					if(Hyphenator.patterns[lang][part]!==undefined) {
-						values=Hyphenator.patterns[lang][part];
-						var i=s-1;
-						var v;
-						for(var p=0, l=values.length; p<l; p++, i++) {
-							v=parseInt(values.charAt(p));
-							if(v>positions[i]) {
-								positions[i]=v; //set the values, overwriting lower values
+				digits = 1;
+				patl = pat.length;
+				for (i = 0; i < patl; i++) {
+					c = pat.charAt(i);
+					if (numb3rs[c]) {
+						if (i === 0) {
+							z = p - 1;
+							if (!hypos[z] || hypos[z] < c) {
+								hypos[z] = c;
 							}
+						} else {
+							z = p + i - digits;
+							if (!hypos[z] || hypos[z] < c) {
+								hypos[z] = c;
+							}
+						}
+						digits++;								
+					}
+				}
+			}
+		}
+		inserted = 0;
+		for (i = lo.leftmin; i <= (word.length - lo.rightmin); i++) {
+			if (!!(hypos[i] & 1)) {
+				s.splice(i + inserted + 1, 0, hyphen);
+				inserted++;
+			}
+		}
+		hyphenatedword = s.slice(1, -1).join('');
+		if (enableCache) {
+			lo.cache[word] = hyphenatedword;
+		}
+		return hyphenatedword;
+	},
+		
+	/**
+	 * @name Hyphenator-hyphenateURL
+	 * @methodOf Hyphenator
+	 * @description
+	 * Puts {@link Hyphenator-urlhyphen} after each no-alphanumeric char that my be in a URL.
+	 * @param string URL to hyphenate
+	 * @returns string the hyphenated URL
+	 * @public
+	 */
+	hyphenateURL = function (url) {
+		return url.replace(/([:\/\.\?#&_,;!@]+)/gi, '$&' + urlhyphen);
+	},
+
+	/**
+	 * @name Hyphenator-hyphenateElement
+	 * @methodOf Hyphenator
+	 * @description
+	 * Takes the content of the given element and - if there's text - replaces the words
+	 * by hyphenated words. If there's another element, the function is called recursively.
+	 * When all words are hyphenated, the visibility of the element is set to 'visible'.
+	 * @param object The element to hyphenate
+	 * @param string The language used in this element
+	 * @public
+	 */
+	hyphenateElement = function (el) {
+		var hyphenatorSettings = Expando.getDataForElem(el),
+			lang = hyphenatorSettings.language, hyphenate, n, i;
+		if (Hyphenator.languages.hasOwnProperty(lang)) {
+			hyphenate = function (word) {
+				if (urlOrMailRE.test(word)) {
+					return hyphenateURL(word);
+				} else {
+					return hyphenateWord(lang, word);
+				}
+			};
+			i = 0;
+			while (!!(n = el.childNodes[i++])) {
+				if (n.nodeType === 3 && n.data.length >= min) { //type 3 = #text -> hyphenate!
+					n.data = n.data.replace(Hyphenator.languages[lang].genRegExp, hyphenate);
+				}
+			}
+		}
+		if (hyphenatorSettings.isHidden && intermediateState === 'hidden') {
+			el.style.visibility = 'visible';
+			if (!hyphenatorSettings.hasOwnStyle) {
+				el.setAttribute('style', ''); // without this, removeAttribute doesn't work in Safari (thanks to molily)
+				el.removeAttribute('style');
+			} else {
+				if (el.style.removeProperty) {
+					el.style.removeProperty('visibility');
+				} else if (el.style.removeAttribute) { // IE
+					el.style.removeAttribute('visibility');
+				}  
+			}
+		}
+		if (hyphenatorSettings.isLast) {
+			state = 3;
+			onHyphenationDone();
+		}
+	},
+	
+	/**
+	 * @name Hyphenator-removeHyphenationFromElement
+	 * @methodOf Hyphenator
+	 * @description
+	 * Removes all hyphens from the element. If there are other elements, the function is
+	 * called recursively.
+	 * Removing hyphens is usefull if you like to copy text. Some browsers are buggy when the copy hyphenated texts.
+	 * @param object The element where to remove hyphenation.
+	 * @public
+	 */
+	removeHyphenationFromElement = function (el) {
+		var h, i = 0, n;
+		switch (hyphen) {
+		case '|':
+			h = '\\|';
+			break;
+		case '+':
+			h = '\\+';
+			break;
+		case '*':
+			h = '\\*';
+			break;
+		default:
+			h = hyphen;
+		}
+		while (!!(n = el.childNodes[i++])) {
+			if (n.nodeType === 3) {
+				n.data = n.data.replace(new RegExp(h, 'g'), '');
+				n.data = n.data.replace(new RegExp(zeroWidthSpace, 'g'), '');
+			} else if (n.nodeType === 1) {
+				removeHyphenationFromElement(n);
+			}
+		}
+	},
+
+	/**
+	 * @name Hyphenator-hyphenateDocument
+	 * @methodOf Hyphenator
+	 * @description
+	 * Calls hyphenateElement() for all members of elements. This is done with a setTimout
+	 * to prevent a "long running Script"-alert when hyphenating large pages.
+	 * Therefore a tricky bind()-function was necessary.
+	 * @public
+	 */
+	hyphenateDocument = function () {
+		function bind(fun, arg) {
+			return function () {
+				return fun(arg);
+			};
+		}
+		var i = 0, el;
+		while (!!(el = elements[i++])) {
+			window.setTimeout(bind(hyphenateElement, el), 0);
+
+		}
+	},
+
+	/**
+	 * @name Hyphenator-removeHyphenationFromDocument
+	 * @methodOf Hyphenator
+	 * @description
+	 * Does what it says ;-)
+	 * @public
+	 */
+	removeHyphenationFromDocument = function () {
+		var i = 0, el;
+		while (!!(el = elements[i++])) {
+			removeHyphenationFromElement(el);
+		}
+		state = 4;
+	};
+
+	return {
+		
+		/**
+		 * @name Hyphenator.version
+		 * @memberOf Hyphenator
+		 * @description
+		 * String containing the actual version of Hyphenator.js
+		 * [major release].[minor releas].[bugfix release]
+		 * major release: new API, new Features, big changes
+		 * minor release: new languages, improvements
+		 * @public
+         */		
+		version: '2.4.0',
+		
+		/**
+		 * @name Hyphenator.languages
+		 * @memberOf Hyphenator
+		 * @description
+		 * Objects that holds key-value pairs, where key is the language and the value is the
+		 * language-object loaded from (and set by) the pattern file.
+		 * The language object holds the following members:
+		 * <table>
+		 * <tr><th>key</th><th>desc></th></tr>
+		 * <tr><td>leftmin</td><td>The minimum of chars to remain on the old line</td></tr>
+		 * <tr><td>rightmin</td><td>The minimum of chars to go on the new line</td></tr>
+		 * <tr><td>shortestPattern</td><td>The shortes pattern (numbers don't count!)</td></tr>
+		 * <tr><td>longestPattern</td><td>The longest pattern (numbers don't count!)</td></tr>
+		 * <tr><td>specialChars</td><td>Non-ASCII chars in the alphabet.</td></tr>
+		 * <tr><td>patterns</td><td>the patterns</td></tr>
+		 * </table>
+		 * And optionally (or after prepareLanguagesObj() has been called):
+		 * <table>
+		 * <tr><td>exceptions</td><td>Excpetions for the secified language</td></tr>
+		 * </table>
+		 * @public
+         */		
+		languages: {},
+		
+
+		/**
+		 * @name Hyphenator.config
+		 * @methodOf Hyphenator
+		 * @description
+		 * Config function that takes an object as an argument. The object contains key-value-pairs
+		 * containig Hyphenator-settings. This is a shortcut for calling Hyphenator.set...-Methods.
+		 * @param object <table>
+		 * <tr><th>key</th><th>values</th><th>default</th></tr>
+		 * <tr><td>classname</td><td>string</td><td>'hyphenate'</td></tr>
+		 * <tr><td>minwordlength</td><td>integer</td><td>6</td></tr>
+		 * <tr><td>hyphenchar</td><td>string</td><td>'&amp;shy;'</td></tr>
+		 * <tr><td>urlhyphenchar</td><td>string</td><td>'zero with space'</td></tr>
+		 * <tr><td>togglebox</td><td>function</td><td>see code</td></tr>
+		 * <tr><td>displaytogglebox</td><td>boolean</td><td>false</td></tr>
+		 * <tr><td>remoteloading</td><td>boolean</td><td>true</td></tr>
+		 * <tr><td>onhyphenationdonecallback</td><td>function</td><td>empty function</td></tr>
+		 * <tr><td>onerrorhandler</td><td>function</td><td>alert(onError)</td></tr>
+		 * <tr><td>intermediatestate</td><td>string</td><td>'hidden'</td></tr>
+		 * </table>
+		 * @public
+		 * @example &lt;script src = "Hyphenator.js" type = "text/javascript"&gt;&lt;/script&gt;
+         * &lt;script type = "text/javascript"&gt;
+         *     Hyphenator.config({'minwordlength':4,'hyphenchar':'|'});
+         *     Hyphenator.run();
+         * &lt;/script&gt;
+         */
+		config: function (obj) {
+			var assert = function (name, type) {
+					if (typeof obj[name] === type) {
+						return true;
+					} else {
+						onError(new Error('Config onError: ' + name + ' must be of type ' + type));
+						return false;
+					}
+				},
+				key;
+			for (key in obj) {
+				if (obj.hasOwnProperty(key)) {
+					switch (key) {
+					case 'classname':
+						if (assert('classname', 'string')) {
+							hyphenateClass = obj.classname;
+						}
+						break;
+					case 'donthyphenateclassname':
+						if (assert('donthyphenateclassname', 'string')) {
+							dontHyphenateClass = obj.donthyphenateclassname;
+						}						
+						break;
+					case 'minwordlength':
+						if (assert('minwordlength', 'number')) {
+							min = obj.minwordlength;
+						}
+						break;
+					case 'hyphenchar':
+						if (assert('hyphenchar', 'string')) {
+							if (obj.hyphenchar === '&shy;') {
+								obj.hyphenchar = String.fromCharCode(173);
+							}
+							hyphen = obj.hyphenchar;
+						}
+						break;
+					case 'urlhyphenchar':
+						if (obj.hasOwnProperty('urlhyphenchar')) {
+							if (assert('urlhyphenchar', 'string')) {
+								urlhyphen = obj.urlhyphenchar;
+							}
+						}
+						break;
+					case 'togglebox':
+						if (assert('togglebox', 'function')) {
+							toggleBox = obj.togglebox;
+						}
+						break;
+					case 'displaytogglebox':
+						if (assert('displaytogglebox', 'boolean')) {
+							displayToggleBox = obj.displaytogglebox;
+						}
+						break;
+					case 'remoteloading':
+						if (assert('remoteloading', 'boolean')) {
+							enableRemoteLoading = obj.remoteloading;
+						}
+						break;
+					case 'enablecache':
+						if (assert('enablecache', 'boolean')) {
+							enableCache = obj.enablecache;
+						}
+						break;
+					case 'onhyphenationdonecallback':
+						if (assert('onhyphenationdonecallback', 'function')) {
+							onHyphenationDone = obj.onhyphenationdonecallback;
+						}
+						break;
+					case 'onerrorhandler':
+						if (assert('onerrorhandler', 'function')) {
+							onError = obj.onerrorhandler;
+						}
+						break;
+					case 'intermediatestate':
+						if (assert('intermediatestate', 'string')) {
+							intermediateState = obj.intermediatestate;
+						}
+						break;
+					case 'selectorfunction':
+						if (assert('selectorfunction', 'function')) {
+							selectorFunction = obj.selectorfunction;
+						}
+						break;
+					default:
+						onError(new Error('Hyphenator.config: property ' + key + ' not known.'));
+					}
+				}
+			}
+		},
+
+		/**
+		 * @name Hyphenator.run
+		 * @methodOf Hyphenator
+		 * @description
+		 * Bootstrap function that starts all hyphenation processes when called.
+		 * @public
+		 * @example &lt;script src = "Hyphenator.js" type = "text/javascript"&gt;&lt;/script&gt;
+         * &lt;script type = "text/javascript"&gt;
+         *   Hyphenator.run();
+         * &lt;/script&gt;
+         */
+	    run: function () { 
+			var process = function () {
+				try {
+					autoSetMainLanguage();
+					gatherDocumentInfos();
+					prepare(hyphenateDocument);
+					if (displayToggleBox) {
+						toggleBox(true);
+					}
+				} catch (e) {
+					onError(e);
+				}
+			};
+			if (!documentLoaded) {
+				runOnContentLoaded(window, process);
+			}
+			if (Hyphenator.isBookmarklet() || documentLoaded) {
+				process();
+			}
+		},
+		
+		/**
+		 * @name Hyphenator.addExceptions
+		 * @methodOf Hyphenator
+		 * @description
+		 * Adds the exceptions from the string to the appropriate language in the 
+		 * {@link Hyphenator-languages}-object
+		 * @param string The language
+		 * @param string A comma separated string of hyphenated words WITH spaces.
+		 * @public
+		 * @example &lt;script src = "Hyphenator.js" type = "text/javascript"&gt;&lt;/script&gt;
+         * &lt;script type = "text/javascript"&gt;
+         *   Hyphenator.addExceptions('de','ziem-lich, Wach-stube');
+         *   Hyphenator.run();
+         * &lt;/script&gt;
+         */
+		addExceptions: function (lang, words) {
+			if (lang === '') {
+				lang = 'global';
+			}
+			if (exceptions.hasOwnProperty[lang]) {
+				exceptions[lang] += ", " + words;
+			} else {
+				exceptions[lang] = words;
+			}
+		},
+		
+		/**
+		 * @name Hyphenator.hyphenate
+		 * @methodOf Hyphenator
+		 * @public
+		 * @description
+		 * Hyphenates the target. The language patterns must be loaded.
+		 * If the target is a string, the hyphenated string is returned,
+		 * if it's an object, the values are hyphenated directly.
+		 * @param mixed the target to be hyphenated
+		 * @param string the language of the target
+		 * @returns string
+		 * @example &lt;script src = "Hyphenator.js" type = "text/javascript"&gt;&lt;/script&gt;
+		 * &lt;script src = "patterns/en.js" type = "text/javascript"&gt;&lt;/script&gt;
+         * &lt;script type = "text/javascript"&gt;
+		 * var t = Hyphenator.hyphenate('Hyphenation', 'en'); //Hy|phen|ation
+		 * &lt;/script&gt;
+		 */
+		hyphenate: function (target, lang) {
+			var hyphenate, n, i;
+			if (Hyphenator.languages.hasOwnProperty(lang)) {
+				if (!Hyphenator.languages[lang].prepared) {
+					prepareLanguagesObj(lang);
+				}
+				hyphenate = function (word) {
+					if (urlOrMailRE.test(word)) {
+						return hyphenateURL(word);
+					} else {
+						return hyphenateWord(lang, word);
+					}
+				};
+				if (typeof target === 'string' || target.constructor === String) {
+					return target.replace(Hyphenator.languages[lang].genRegExp, hyphenate);
+				} else if (typeof target === 'object') {
+					i = 0;
+					while (!!(n = target.childNodes[i++])) {
+						if (n.nodeType === 3 && n.data.length >= min) { //type 3 = #text -> hyphenate!
+							n.data = n.data.replace(Hyphenator.languages[lang].genRegExp, hyphenate);
+						} else if (n.nodeType === 1) {
+							if (n.lang !== '') {
+								lang = n.lang;
+							}
+							Hyphenator.hyphenate(n, lang);
 						}
 					}
 				}
-			} while(s--)
-			wl=word.length;
-			for(i=1; i<wl; i++) {
-				if(!!(positions[i]&1) && i>=Hyphenator.leftmin[lang] && i<=word.length-Hyphenator.rightmin[lang]) {
-					result.push(word.substring(result.join('').length,i)); //Silben eintragen
-				}
+			} else {
+				onError(new Error('Language "' + lang + '" is not loaded.'));
 			}
-			result.push(word.substring(result.join('').length,i)); //Letzte Silbe eintragen
-			return result.join(hyphen);
 		},
-		hyphenateURL: function(url){
-			var res='';
-			res=url.replace(/\//gi,zerowidthspace+'/');
-			res=res.replace(/\./gi,zerowidthspace+'.');
-			return res;
-		}
+		
+		/**
+		 * @name Hyphenator.isBookmarklet
+		 * @methodOf Hyphenator
+		 * @description
+		 * Returns {@link Hyphenator-isBookmarklet}.
+		 * @returns boolean
+		 * @public
+         */
+		isBookmarklet: function () {
+			return isBookmarklet;
+		},
 
+
+		/**
+		 * @name Hyphenator.toggleHyphenation
+		 * @methodOf Hyphenator
+		 * @description
+		 * Checks the current state of the ToggleBox and removes or does hyphenation.
+		 * @public
+         */
+		toggleHyphenation: function () {
+			switch (state) {
+			case 3:
+				removeHyphenationFromDocument();
+				toggleBox(false);
+				break;
+			case 4:
+				hyphenateDocument();
+				toggleBox(true);
+				break;
+			}
+		},
+
+            // hack so things work in Greasemonkey --MS
+            setLoaded: function() { documentLoaded = true; }
 	};
-})();
+}());
 
 // disable remote loading
-Hyphenator.setRemoteLoading(false);
+Hyphenator.config({'remoteloading':false});
 
-// load english patterns, copied from hyphenator en.js file
-﻿Hyphenator.leftmin['en']=2;
-Hyphenator.rightmin['en']=2;
-Hyphenator.shortestPattern['en']=2;
-Hyphenator.longestPattern['en']=8;
-Hyphenator.specialChars['en']='';
-Hyphenator.patterns['en']={"_ach":"00004","_adder":"0004000","_aft":"00010","_alt":"00030","_amat":"000500","_anc":"00050","_ang":"00004","_anim":"000050","_ant":"00004","_ante":"000300","_antis":"0000050","_ars":"00050","_artie":"0004000","_arty":"000400","_asc":"00030","_asp":"00010","_ass":"00010","_aster":"0000005","_atom":"000005","_aud":"00010","_avi":"00040","_awn":"00004","_bag":"00040","_bana":"000500","_base":"000040","_ber":"00004","_bera":"000500","_besm":"000300","_besto":"0005000","_bri":"00002","_butti":"0000400","_campe":"0000400","_canc":"000050","_capab":"0000050","_carol":"0000500","_cat":"00040","_cela":"000400","_ch":"0004","_chilli":"00000050","_ci":"0002","_citr":"000050","_coe":"00030","_cor":"00040","_corner":"00005000","_demoi":"0004000","_deo":"00030","_dera":"000300","_deri":"000300","_desc":"000040","_dictio":"00000005","_dot":"00040","_duc":"00040","_dumb":"000005","_earth":"0000005","_easi":"000030","_eb":"0004","_eer":"00004","_eg":"0002","_eld":"00050","_elem":"000300","_enam":"000003","_eng":"00030","_ens":"00030","_equit":"0005050","_erri":"000400","_es":"0003","_eu":"0003","_eye":"00005","_fes":"00003","_former":"00005000","_ga":"0002","_ge":"0002","_gent":"000034","_geog":"000500","_gia":"00050","_gib":"00040","_gor":"00040","_handi":"0000050","_hank":"000050","_he":"0002","_heroi":"0000050","_hes":"00003","_het":"00003","_hib":"00030","_hier":"000300","_honey":"0000500","_hono":"000030","_hov":"00005","_idl":"00040","_idol":"000003","_imm":"00030","_impin":"0005000","_in":"0001","_inci":"000300","_ine":"00002","_ink":"00020","_ins":"00030","_irr":"00050","_isi":"00040","_jur":"00030","_lacy":"000400","_lam":"00040","_later":"0000500","_lath":"000005","_le":"0002","_lege":"000050","_len":"00004","_lep":"00005","_lev":"00001","_lig":"00040","_liga":"000050","_lin":"00020","_lio":"00030","_lit":"00040","_maga":"000055","_malo":"000050","_mana":"000050","_marti":"0000500","_me":"0002","_merc":"000030","_meter":"0005000","_mis":"00001","_misti":"0000050","_mone":"000030","_moro":"000300","_muta":"000500","_mutab":"0000050","_nic":"00040","_od":"0002","_odd":"00005","_ofte":"000500","_orato":"0005000","_orc":"00030","_ord":"00010","_ort":"00030","_os":"0003","_ostl":"000400","_oth":"00003","_out":"00003","_pedal":"0000500","_pete":"000500","_petit":"0005000","_pie":"00040","_pion":"000050","_pit":"00020","_prem":"000030","_rac":"00040","_rant":"000040","_rationa":"000000500","_ree":"00002","_remit":"0005000","_res":"00002","_restat":"00050000","_rig":"00040","_ritu":"000050","_roq":"00040","_rost":"000050","_rowd":"000050","_rud":"00040","_scie":"000030","_self":"000005","_sell":"000005","_sen":"00020","_serie":"0005000","_sh":"0002","_si":"0002","_sing":"000004","_st":"0004","_stabl":"0000500","_sy":"0002","_ta":"0004","_te":"0004","_tenan":"0000500","_th":"0002","_ti":"0002","_til":"00004","_timo":"000055","_ting":"000004","_tink":"000050","_tona":"000040","_top":"00040","_topi":"000050","_tous":"000050","_tribut":"00000500","_una":"00010","_unce":"000300","_under":"0000005","_une":"00010","_unk":"00050","_uno":"00050","_unu":"00030","_up":"0003","_ure":"00003","_usa":"00050","_vende":"0000400","_vera":"000500","_wili":"000050","_ye":"0004","ab_":"4000","abal":"05000","aban":"05000","abe":"0002","aberd":"005000","abia":"00050","abitab":"0050500","ablat":"005000","aboliz":"0055000","abr":"4000","abrog":"005000","abul":"00300","acar":"04000","acard":"005000","acaro":"005000","aceou":"050000","acer":"00100","achet":"050000","aci":"4200","acie":"03000","acin":"00100","acio":"03000","acrob":"005000","actif":"000500","acul":"00300","acum":"00400","ad":"020","addin":"004000","ader_":"005000","adi":"2000","adia":"03000","adica":"003000","adier":"000400","adio":"03000","adit":"03000","adiu":"05000","adle":"00400","adow":"00300","adran":"005000","adsu":"00400","adu":"4000","aduc":"03000","adum":"00500","aer":"0040","aerie":"000040","af":"020","aff":"0004","agab":"04000","agan":"00040","agell":"005000","ageo":"00040","ageu":"40000","agi":"0010","agl":"4040","agn":"0010","ago":"0200","agog":"30000","agoni":"003000","aguer":"050000","agul":"00500","agy":"0400","aha":"0300","ahe":"0300","ahl":"0040","aho":"0300","ai":"002","aia":"0500","aic_":"03000","aily":"00500","ain":"0440","ainin":"000500","aino":"00050","aiten":"000500","aj":"010","aken":"00100","alab":"00500","alad":"00300","alar":"04000","aldi":"40000","ale":"2000","alend":"003000","alenti":"0400000","aleo":"05050","ali":"0010","alia_":"004000","alie":"00040","allev":"005000","allic":"400000","alm":"4000","alog_":"050000","aly_":"04000","alys":"40000","alyst":"550000","alyt":"50000","alyz":"30000","ama":"4000","amab":"00500","amag":"00300","amara":"000500","amasc":"005000","amatis":"0400000","amato":"045000","amera":"005000","amic":"00300","amif":"00500","amily":"005000","amin":"00100","amino":"000400","amo":"0200","amon":"05000","amori":"000050","ampen":"000500","an":"020","anage":"003000","analy":"300000","anar":"03000","anarc":"003000","anari":"000040","anati":"030000","and":"4000","andes":"000040","andis":"003000","andl":"00100","andow":"004000","anee":"05000","anen":"03000","anest_":"0050000","aneu":"03000","ang":"2000","angie":"000500","angl":"00100","anic":"04100","anies":"030000","anif":"00330","anime":"004000","animi":"050000","anine":"050000","anio":"00300","anip":"03000","anish":"003000","anit":"00300","aniu":"03000","ankli":"004000","anniz":"500000","ano":"0004","anot":"00500","anoth":"000005","ansa":"00200","ansco":"004000","ansn":"00400","ansp":"00200","anspo":"000300","anst":"00400","ansur":"004000","antal":"000004","antie":"004000","anto":"40000","antr":"00200","antw":"00400","anua":"00300","anul":"00300","anur":"05000","ao":"400","apar":"00004","apat":"00500","apero":"005000","apher":"030000","aphi":"40000","apilla":"0400000","apillar":"00500000","apin":"00300","apita":"003000","apitu":"030000","apl":"0200","apoc":"00005","apola":"005000","apori":"000050","apost":"000030","apses":"000500","apu":"0300","aque":"00005","ar":"220","aract":"003000","arade":"050000","aradis":"0050000","aral":"00300","aramete":"05000000","arang":"000040","arap":"00030","arat":"00400","aratio":"0500000","arativ":"0050000","arau":"05000","arav":"00504","araw":"00004","arbal":"000004","archan":"0040000","ardine":"0050000","ardr":"00400","areas":"005000","aree":"03000","arent":"003000","aress":"050000","arfi":"00400","arfl":"00400","ari":"0010","arial":"005000","arian":"003000","ariet":"030000","arim":"00400","arinat":"0050000","ario":"00300","ariz":"00200","armi":"00200","arod":"00550","aroni":"050000","aroo":"03000","arp":"0020","arq":"0030","arre":"00004","arsa":"00400","arsh":"00200","as_":"4000","asab":"00400","asant":"003000","ashi":"00004","asia_":"050000","asib":"03000","asic":"03000","asit":"55040","aski":"00030","asl":"0040","asoc":"04000","asph":"00500","assh":"00400","asten":"003000","astr":"00100","asura":"000050","ata":"0200","atabl":"003000","atac":"00500","atalo":"003000","atap":"00500","atec":"00050","atech":"005000","atego":"003000","aten_":"003000","atera":"003000","atern":"000050","aterna":"0500000","atest":"003000","atev":"00500","ath":"4000","athem":"000500","athen":"050000","atho":"00400","athom":"000500","ati_":"40000","atia":"05000","atib":"00550","atic":"00100","atif":"00300","ationar":"00000500","atitu":"003000","atog":"04000","atom":"02000","atomiz":"0050000","atop":"04000","atos":"04000","atr":"0100","atrop":"005000","atsk":"00400","attag":"004000","atte":"00500","atth":"00400","atu":"0200","atua":"00500","atue":"00500","atul":"00300","atura":"003000","aty":"0200","aub":"0040","augh":"00003","augu":"00300","aul":"0042","aund":"00050","aur":"0030","ausib":"005000","auten":"000500","auth":"00100","ava":"0200","avag":"00300","avan":"05000","aveno":"000400","avera":"003000","avern":"005000","avery":"005000","avi":"0010","avier":"000400","avig":"00300","avoc":"00500","avor":"01000","away":"30000","awi":"0030","awly":"00400","aws":"0004","axic":"00400","axid":"00400","ayal":"00500","aye":"0004","ays":"0004","azier":"000400","azzi":"00050","ba_":"5000","badger":"0005000","bage":"00400","bala":"00010","bandag":"0005000","bane":"00040","bani":"00030","barbi":"000005","baria":"000040","bassi":"000400","bat":"1000","baz":"0040","bb":"210","bbe":"0200","bber":"03000","bbina":"000400","bd":"410","be_":"4000","beak":"00004","beat":"00003","bed":"4020","beda":"00300","bede":"00300","bedi":"00300","begi":"00300","begu":"00500","bel":"1000","beli":"00100","belo":"00300","bem":"4050","benig":"005000","benu":"00500","bes":"4004","besp":"00300","bestr":"005000","bet":"3000","betiz":"000500","betr":"00500","betw":"00300","bew":"0030","beyo":"00500","bf":"200","bh":"430","bib":"0020","bid":"0040","bie":"3000","bien":"00500","bier":"00400","bif":"2300","bil":"1000","biliz":"003000","binar":"000054","bind":"00040","binet":"005000","biogr":"003000","biou":"00500","bit":"0020","bitio":"303000","bitr":"00300","bitua":"300500","bitz":"05000","bj":"010","bk":"004","bl":"022","blath":"000005","ble_":"04000","blen":"00004","blesp":"500000","blis":"03000","blo":"0400","blunt":"000040","bm":"410","bn":"430","bneg":"00050","bod":"3000","bodi":"00030","boe":"0040","bolic":"000300","bombi":"000400","bona":"00040","bonat":"000500","boo":"3000","bor_":"50000","bora":"41000","bord":"00050","bore":"50000","bori":"50000","bos":"5004","bota":"05000","both":"00005","boto":"00400","bound":"000003","bp":"400","brit":"40000","broth":"000003","bs":"252","bsor":"00004","bt":"200","btl":"0040","bto":"0400","btr":"0300","buffer":"0004000","buga":"00400","buli":"00300","bumi":"00004","bun":"0040","bunti":"000040","bure":"00300","busie":"000500","busse":"000040","bust":"50000","buta":"40000","butio":"300000","buto":"05000","bv":"010","bw":"450","by_":"5000","bys":"0004","ca":"100","cabin":"000300","cabl":"00100","cach":"00004","caden":"005000","cag":"4004","cah":"2500","calat":"003000","calla":"000400","callin":"0000500","calo":"40000","cand":"00050","cane":"00040","canic":"000400","canis":"000500","caniz":"000300","canty":"000400","cany":"00004","caper":"005000","carom":"000500","caster":"0000500","castig":"0005000","casy":"40000","cath":"00400","cativ":"400000","caval":"000500","cc":"030","ccha":"00005","ccia":"00040","ccompa":"0000005","ccon":"00004","ccout":"000030","ce_":"2000","ced_":"40000","ceden":"400000","cei":"3000","cel_":"50000","cell":"30000","cen":"1000","cenc":"30000","cene":"20040","ceni":"40000","cent":"30000","cep":"3000","ceram":"005000","cesa":"40000","cessi":"300000","cessib":"0005050","cest":"00050","cet":"0004","ceta":"05400","cew":"0004","ch":"200","ch_":"4000","chab":"40300","chanic":"5000000","chanis":"0055000","che":"0002","cheap":"000003","ched":"40000","chelo":"000500","chemi":"300000","chene":"005000","cher_":"003000","chers":"003000","chin":"40100","chine_":"5000000","chiness":"00500000","chini":"500000","chio":"50000","chit":"30000","chiz":"00020","cho":"3002","chti":"00400","ci":"100","cia":"3000","ciab":"00250","ciar":"00050","cic":"0050","cier":"40000","cific_":"5000000","cii":"4000","cila":"00400","cili":"30000","cim":"2000","cin":"2000","cina":"04000","cinat":"300000","cinem":"000300","cing":"01000","cing_":"050000","cino":"50000","cion":"00004","cipe":"40000","ciph":"00300","cipic":"400000","cista":"400000","cisti":"400000","cit":"2100","citiz":"000300","ciz":"5000","ck":"001","cki":"0030","cl":"144","clar":"40000","claratio":"050000000","clare":"500000","clem":"00040","clic":"40000","clim":"00004","cly":"0004","cn":"050","co":"100","coag":"00500","coe":"0002","cog":"2000","cogr":"00400","coi":"0004","coinc":"003000","coli":"00050","colo":"50000","color":"000300","comer":"000500","cona":"00040","cone":"04000","cong":"00030","cont":"00050","copa":"00300","copic":"000300","copl":"00400","corb":"40000","coron":"000030","cose":"00040","cov":"0001","cove":"00004","cowa":"00050","coze":"00050","cozi":"00500","cq":"010","crast":"000050","crat_":"500000","cratic":"5000000","creat":"000300","cred":"50000","creta":"430000","crev":"00040","cri":"0002","crif":"00050","crin":"04000","cris":"00004","criti":"500000","cropl":"000400","cropo":"000050","crose":"000040","crud":"00040","cs":"432","ct":"210","ctab":"00040","ctang":"005000","ctant":"050000","cte":"0200","cter":"03000","cticu":"040000","ctimi":"000030","ctur":"00040","ctw":"0400","cud":"0005","cuf":"0400","cui":"0400","cuity":"005000","culi":"50000","cultis":"0004000","cultu":"300000","cuma":"00200","cume":"03000","cumi":"00400","cun":"3000","cupi":"00300","cupy":"00500","curab":"000540","curia":"005000","cus":"1000","cussi":"000040","cut":"3400","cutie":"004000","cutiv":"450000","cutr":"40000","cy":"100","cze":"0004","da":"120","da_":"5000","dab":"2340","dach":"00004","daf":"4000","dag":"2000","dam":"0022","dang":"00030","dard":"00005","dark":"00005","dary":"40000","dat":"3000","dativ":"400000","dato":"40000","dav":"5004","dave":"00050","day":"5000","db":"010","dc":"050","dd":"014","de_":"2000","deaf":"00005","debit":"000500","debon":"004000","decan":"000004","decil":"004000","decom":"005000","ded":"2100","dee_":"40000","deif":"00500","delie":"000040","deliq":"000550","delo":"00500","dem":"0400","dem_":"50000","demic":"300000","demic_":"0005000","demil":"005000","demons":"0040000","demor":"000005","den":"1000","denar":"004000","deno":"00300","dentif":"0000050","denu":"00300","dep":"0010","depa":"00300","depi":"00004","depu":"00200","deq":"0300","derh":"04000","derm":"50000","derniz":"0000500","ders":"00050","des":"0002","des_":"02000","desc":"00100","deso":"00250","desti":"000300","destr":"003000","desu":"00400","det":"0010","deto":"00200","dev":"0010","devil":"000300","dey":"4000","df":"410","dga":"0400","dget":"03040","dgi":"0010","dgy":"0200","dh":"012","di_":"5000","dia":"1430","diab":"00050","dicam":"004000","dice":"04000","dict":"30000","did":"3000","dien":"50300","dif":"0100","dige":"00300","dilato":"0040000","din":"0100","dina":"10000","dine_":"300000","dini":"50000","diniz":"005000","dio":"1000","diog":"00050","dipl":"00400","dir":"0002","dire":"00100","dirti":"000050","dis":"0001","disi":"50000","dist":"04030","diti":"02000","div":"1010","dj":"010","dk":"052","dla":"4500","dle_":"30000","dled":"30000","dles_":"300000","dless":"400000","dlo":"2300","dlu":"4500","dly":"2000","dm":"010","dn":"414","do":"100","do_":"3000","dode":"00500","doe":"5000","dof":"2500","dog":"0400","dola":"00400","doli":"00004","dolor":"005000","domiz":"000500","donat":"003000","doni":"00004","dood":"00030","dopp":"00040","dor":"0400","dos":"3000","dout":"45000","dov":"0040","dox":"3000","dp":"010","dr":"100","dragon":"0000500","drai":"40000","dre":"0004","drear":"000050","dren":"50000","drib":"00040","dril":"00004","drop":"00040","drow":"40000","drupli":"5000000","dry":"4000","ds":"212","dsp":"0040","dsw":"0400","dsy":"0400","dth":"0200","du":"100","dua":"0110","duc":"0020","duca":"01000","ducer":"000500","duct_":"400000","ducts":"400000","duel":"00500","dug":"0040","dule":"03000","dumbe":"000400","dun":"0040","dup":"4000","dupe":"00400","dv":"010","dw":"010","dy":"020","dyn":"5000","dyse":"00400","dysp":"00050","eab":"0140","eact":"03000","ead":"0001","eadie":"000500","eage":"00400","eager":"005000","eal":"0040","ealer":"000500","ealou":"000300","eamer":"000300","eand":"05000","eara":"00030","earc":"00040","eares":"000500","earic":"000400","earil":"000400","eark":"00050","eart":"00020","earte":"000030","easp":"00500","eass":"03000","east":"00003","eat":"0020","eaten":"000500","eathi":"000030","eatif":"050000","eatu":"04300","eav":"0020","eaven":"000300","eavi":"00050","eavo":"00050","eb":"210","ebel_":"040000","ebels":"040000","eben":"04000","ebit":"04000","ebr":"0300","ecad":"04000","ecanc":"000050","ecca":"00005","ece":"0100","ecessa":"0050000","eci":"0020","ecib":"04000","ecificat":"005000000","ecifie":"0050000","ecify":"005000","ecim":"00300","ecit":"00040","ecite":"050000","eclam":"040000","eclus":"040000","ecol":"02000","ecomm":"040000","ecompe":"0400000","econc":"040000","ecor":"02000","ecora":"003000","ecoro":"000500","ecr":"0100","ecrem":"040000","ectan":"004000","ecte":"00400","ecu":"0100","ecul":"04000","ecula":"003000","eda":"2200","edd":"4030","eder":"04100","edes":"00040","edi":"4000","edia":"03000","edib":"00300","edica":"003000","edim":"00300","edit":"00100","ediz":"00050","edo":"4000","edol":"04000","edon":"00002","edri":"04000","edul":"04000","edulo":"005000","eec":"0020","eedi":"00030","eef":"0020","eeli":"00030","eely":"00400","eem":"0020","eena":"00400","eep":"0041","ees":"0024","eest":"00004","eety":"00400","eex":"0500","ef":"010","efere":"043000","eff":"1000","efic":"04000","efici":"500000","efil":"00004","efine":"030000","efinite":"00550000","efit":"30000","efores":"0000500","efuse_":"0400000","egal":"40000","eger":"00004","egib":"00500","egic":"00400","eging":"005000","egit":"05005","egn":"0050","ego_":"04000","egos":"04000","egul":"00100","egur":"05000","egy":"5000","eh":"014","eher":"00004","ei":"002","eic":"0500","eid":"0050","eig":"0002","eigl":"00500","eimb":"03000","einf":"03000","eing":"01000","einst":"050000","eird":"00040","eite":"00030","eith":"00300","eity":"05000","ej":"010","ejud":"04000","ejudi":"005000","ekin":"00040","ekla":"00400","ela":"0100","ela_":"04000","elac":"04000","eland":"000040","elativ":"0050000","elaw":"04000","elaxa":"000004","elea":"03000","elebra":"0050000","elec":"50000","eled":"04000","elega":"003000","elen":"05000","eler":"04100","eles":"01000","elf":"0020","eli":"0020","elibe":"030000","elic_":"045000","elica":"003000","elier":"030000","eligib":"0050000","elim":"05000","eling":"043000","elio":"03000","elis":"02000","elish":"005000","eliv":"03003","ella":"40000","ellab":"004000","ello":"00004","eloc":"05000","elog":"00500","elop_":"003000","elsh":"00200","elta":"00400","elud":"05000","elug":"00500","emac":"04000","emag":"04000","eman":"05000","emana":"005000","emb":"0050","eme":"0100","emel":"02000","emet":"04000","emica":"003000","emie":"00040","emigra":"0050000","emin":"00102","emine":"005000","emini":"003300","emis":"04000","emish":"005000","emiss":"050000","emiz":"00300","emniz":"500000","emog":"00040","emonio":"0000050","empi":"00300","emul":"04000","emula":"005000","emun":"00030","emy":"0300","enamo":"005000","enant":"040000","encher":"0000400","endic":"003000","enea":"05000","enee":"05000","enem":"00300","enero":"005000","enesi":"005000","enest":"005000","enetr":"003000","enew":"03000","enics":"005000","enie":"05000","enil":"05000","enio":"03000","enish":"003000","enit":"00300","eniu":"05000","eniz":"50000","enn":"4000","eno":"4000","enog":"00040","enos":"04000","enov":"00300","ensw":"00400","entage":"0005000","enthes":"4000000","enua":"00300","enuf":"00500","eny_":"03000","enz":"4030","eof":"0500","eog":"0020","eoi":"0404","eol":"0300","eopar":"000300","eor":"0100","eore":"00300","eorol":"005000","eos":"0004","eot":"0400","eoto":"00400","eout":"05000","eow":"0500","epa":"0200","epai":"03000","epanc":"005000","epel":"05000","epent":"030000","epetitio":"005000000","ephe":"00004","epli":"04000","epo":"0100","eprec":"040000","epreca":"0050000","epred":"040000","epreh":"003000","epro":"03000","eprob":"040000","epsh":"00400","eptib":"005050","eput":"04000","eputa":"005000","eq":"010","equil":"000030","equis":"043030","era":"0010","erab":"00040","erand":"400000","erar":"00300","erati_":"4000000","erb":"2000","erbl":"00400","erch":"00300","erche":"004000","ere_":"20000","ereal":"030000","ereco":"000500","erein":"000300","erel_":"005000","eremo":"003000","erena":"005000","erence":"0050000","erene":"400000","erent":"003000","ereq":"00040","eress":"005000","erest":"003000","eret":"00004","erh":"0010","eri":"0010","eria":"01004","erick":"500000","erien":"030000","erier":"000400","erine":"003000","erio":"01000","erit":"40000","eriu":"00400","eriv":"00040","eriva":"040000","erm":"0034","ernis":"004000","ernit":"400000","erniz":"500000","erno":"00300","ero":"2000","erob":"00500","eroc":"05000","eror":"00040","erou":"00100","ers":"0010","erset":"003000","erter":"000300","ertl":"40000","ertw":"00300","eru":"4000","erut":"00040","erwau":"500000","esa":"0140","esage_":"0400000","esages":"0400000","esc":"0020","esca":"02000","escan":"005000","escr":"03000","escu":"00500","ese":"0120","esec":"02000","esecr":"005000","esenc":"005000","esert_":"0400000","eserts":"0400000","eserva":"0400000","esh":"4000","esha":"03000","eshen":"000500","esi":"0100","esic":"02000","esid":"02000","esiden":"0050000","esigna":"0050000","esim":"02500","esin":"00440","esiste":"0000400","esiu":"00040","eskin":"050000","esmi":"00400","esol":"02000","esolu":"003000","eson":"02000","esona":"005000","esp":"0100","esper":"003000","espira":"0050000","espre":"004000","ess":"2000","essib":"004040","estan":"000004","estig":"003000","estim":"005000","esto":"40200","eston":"030000","estr":"20000","estro":"050000","estruc":"0000005","esur":"02000","esurr":"005000","esw":"0040","etab":"00040","etend":"000040","eteo":"03000","ethod":"000003","etic":"00100","etide":"050000","etin":"00004","etino":"000400","etir":"05000","etitio":"0500000","etitiv":"0050000","etn":"4000","etona":"005000","etra":"03000","etre":"03000","etric":"003000","etrif":"005000","etrog":"003000","etros":"005000","etua":"00300","etym":"00500","etz":"0050","eu":"400","eun":"0500","eup":"0300","euro":"00300","eus":"0004","eute":"00004","eutil":"000050","eutr":"00500","evap":"00025","evas":"02000","evast":"005000","evea":"05000","evell":"003000","evelo":"000030","eveng":"050000","eveni":"000040","ever":"00100","everb":"050000","evi":"0100","evid":"00300","evil":"00040","evin":"04000","eviv":"00040","evoc":"05000","evu":"0500","ewa":"0100","ewag":"04000","ewee":"05000","ewh":"0300","ewil":"00005","ewing":"003000","ewit":"03000","exp":"1000","eyc":"5000","eye_":"50000","eys":"0004","fa":"100","fabl":"00300","fabr":"00030","face":"00400","fag":"4000","fain":"00004","falle":"000050","fama":"40400","famis":"000500","far":"5000","farth":"000500","fata":"00300","fathe":"003000","fato":"40000","fault":"000005","fb":"450","fd":"400","fe_":"4000","feas":"00004","feath":"000003","feb":"0040","feca":"40000","fect":"50000","fed":"2000","feli":"00300","femo":"00400","fend":"00020","fende":"000050","fer":"0001","ferr":"50000","fev":"0004","ff":"410","ffes":"04000","ffie":"04000","ffin_":"050000","ffis":"02500","ffly":"04000","ffy":"0200","fh":"400","fi":"100","fia":"0030","fic_":"23000","fical":"430000","fican":"030000","ficate":"4000000","ficen":"030000","ficer":"003000","fici":"00040","ficia":"500000","ficie":"500000","fics":"40000","ficu":"00300","fidel":"005000","fight":"000005","fili":"00050","fillin":"0000500","fily":"40000","fin":"2000","fina":"50000","find":"00025","fine":"00200","fing":"01030","finn":"00040","fisti":"000400","fl":"042","fless":"050000","flin":"00004","flore":"000300","fly":"0205","fm":"400","fn":"400","fo":"100","fon":"5000","fonde":"000400","font":"00040","for":"0020","forat":"005000","foray":"000500","foret":"000050","fori":"00040","forta":"000050","fos":"0005","fp":"450","frat":"00040","frea":"05000","fresc":"000050","fri":"0002","fril":"00004","frol":"00005","fs":"230","ft":"200","fto":"0400","fty":"0200","fu":"300","fuel":"00500","fug":"4000","fumin":"004000","fune":"00500","furi":"00300","fusi":"00004","fuss":"00040","futa":"40000","fy":"100","ga":"100","gaf":"0004","gal_":"50000","gali":"30000","galo":"00300","gam":"2000","gamet":"005000","gamo":"05000","ganis":"000500","ganiz":"003000","ganiza":"0000500","gano":"40000","garn":"00054","gass":"00004","gath":"00003","gativ":"400000","gaz":"4000","gb":"030","gd":"004","ge_":"2000","ged":"2000","geez":"00004","gelin":"000400","gelis":"005000","geliz":"005000","gely":"40000","gen":"1000","genat":"004000","geniz":"005000","geno":"40000","geny":"40000","geo":"1000","geom":"00300","gery":"04000","gesi":"50000","geth":"00005","geto":"40000","gety":"00400","gev":"0040","gg":"412","gge":"0200","gger":"03000","gglu":"00005","ggo":"0004","ghin":"00300","ghout":"005000","ghto":"00400","gi_":"5000","gia":"1040","giar":"00050","gic":"0100","gicia":"500000","gico":"04000","gien":"00005","gies_":"500000","gil":"0004","gimen":"030000","gin_":"34000","ginge":"000500","gins":"54000","gio":"5000","gir":"3000","girl":"00040","gisl":"03000","giu":"0040","giv":"5000","giz":"3000","gl":"002","gla":"0004","gladi":"000050","glas":"50000","gle":"1000","glib":"00040","glig":"03000","glo":"3000","glor":"00030","gm":"010","gmy":"0400","gna":"0040","gna_":"04000","gnett":"000040","gni":"0100","gnin":"02000","gnio":"04000","gno":"0100","gnon":"04000","go":"100","go_":"3000","gob":"0005","goe":"5000","gog":"3440","gois":"00300","gon":"0002","gona":"43300","gondo":"000005","goni":"00300","goo":"5000","goriz":"005000","gorou":"000500","gos_":"50000","gov":"0001","gp":"030","gr":"100","grada":"400000","grai":"04000","gran":"00002","graph_":"5000000","grapher":"05000000","graphic":"50000000","graphy":"4000000","gray":"40000","gren":"00040","gress_":"4000000","grit":"40000","gro":"0400","gruf":"00004","gs":"002","gste":"05000","gth":"0003","gua":"0040","guard":"300000","gue":"2000","guit":"50050","gun":"3000","gus":"3000","gut":"4040","gw":"030","gy":"100","gyn":"2530","gyra":"00500","habl":"03040","hach":"00004","haem":"00040","haet":"00040","hagu":"05000","hala":"00300","halam":"000030","ham":"0040","hanci":"000400","hancy":"000400","hand_":"500000","hang":"00040","hanger":"0000500","hango":"000050","haniz":"055000","hank":"00040","hante":"000400","hapl":"00030","hapt":"00050","haran":"003000","haras":"005000","hard":"00020","harde":"000030","harle":"000400","harpen":"0000500","harter":"0005000","hass":"00050","haun":"00004","haz":"5000","haza":"00030","hb":"010","head":"10000","hear":"30000","hecan":"004000","hecat":"050000","hed":"0400","hedo":"00505","heli":"00340","hellis":"0004000","helly":"000400","helo":"05000","hemp":"00040","hen":"0020","hena":"00004","henat":"000500","heor":"00050","hep":"0005","hera":"04000","herap":"000030","herba":"000400","herea":"000050","hern":"03000","herou":"050000","hery":"03000","hes":"0100","hesp":"00250","het":"0040","heted":"000400","heu":"0004","hf":"010","hh":"010","hian":"00500","hico":"00400","high":"00005","hil":"0402","himer":"000004","hina":"04000","hione":"000040","hip":"0040","hirl":"00040","hiro":"00300","hirp":"00040","hirr":"00040","hisel":"000300","hiss":"00040","hither":"0000500","hiv":"0020","hk":"400","hl":"414","hlan":"00004","hlo":"0200","hlori":"000300","hm":"410","hmet":"00004","hn":"210","hodiz":"050000","hods":"05000","hog":"0040","hoge":"00004","holar":"000500","hole":"30040","homa":"00400","home":"00003","hona":"00040","hony":"00500","hood":"30000","hoon":"00004","horat":"000500","horis":"005000","horte":"000030","horu":"00500","hose":"00040","hosen":"005000","hosp":"00010","hous":"10000","house":"000003","hovel":"000500","hp":"450","hr":"404","hree":"00005","hroniz":"0005000","hropo":"000300","hs":"412","hsh":"0400","htar":"04000","hten":"00100","htes":"00500","hty":"0400","hug":"0040","humin":"004000","hunke":"000500","hunt":"00040","hust":"00034","hut":"0040","hw":"010","hwart":"040000","hype":"00300","hyph":"00300","hys":"0020","ia":"210","ial":"0200","iam":"0004","iamete":"0005000","ian":"0200","ianc":"40000","iani":"00030","iant":"40040","iape":"00500","iass":"00004","iativ":"040000","iatric":"0040000","iatu":"04000","ibe":"0004","ibera":"003000","ibert":"005000","ibia":"00500","ibin":"00300","ibit_":"005000","ibite":"005000","ibl":"0100","ibli":"00300","ibo":"0500","ibr":"0100","ibri":"02500","ibun":"05000","icam":"40000","icap":"50000","icar":"40000","icar_":"040000","icara":"040000","icas":"00005","icay":"04000","iccu":"00004","iceo":"40000","ich":"4000","ici":"2000","icid":"05000","icina":"005000","icip":"02000","icipa":"003000","icly":"04000","icoc":"02500","icr":"4100","icra":"50000","icry":"04000","icte":"00400","ictu":"00002","ictua":"004300","icula":"003000","icum":"00400","icuo":"00500","icur":"03000","id":"200","idai":"04000","idanc":"005000","idd":"0050","ideal":"000300","ides":"00040","idi":"0200","idian":"005000","idiar":"000400","idie":"05000","idio":"00300","idiou":"000500","idit":"00100","idiu":"00500","idle":"03000","idom":"04000","idow":"00300","idr":"0400","idu":"0200","iduo":"00500","ie":"204","iede":"00040","iega":"50500","ield":"00003","iena":"00054","iene":"00040","ienn":"05000","ienti":"030000","ier_":"01000","iesc":"03000","iest":"01000","iet":"0300","if_":"4000","ifero":"005000","iffen":"000500","iffr":"00400","ific_":"400000","ifie":"03000","ifl":"0300","ift":"4000","ig":"200","igab":"00050","igera":"003000","ighti":"000030","igi":"4000","igib":"03000","igil":"00300","igin":"00300","igit":"00300","igl":"0440","igo":"0200","igor":"00300","igot":"00500","igre":"05000","igui":"00050","igur":"00100","ih":"030","ii":"454","ij":"030","ik":"400","ila":"0100","ilab":"00340","ilade":"040000","ilam":"02500","ilara":"000500","ileg":"03000","iler":"00100","ilev":"00004","ilf":"0050","ili":"0010","ilia":"00300","ilib":"00200","ilio":"00300","ilist":"004000","ilit":"20000","iliz":"00200","illab":"000500","iln":"4000","iloq":"00300","ilty":"00400","ilur":"00500","ilv":"0030","imag":"04000","image":"003000","imary":"000500","imentar":"00000050","imet":"40000","imi":"0010","imida":"005000","imile":"000500","imini":"050000","imit":"40000","imni":"00400","imon":"03000","imu":"0200","imula":"003000","in_":"2000","inau":"04300","inav":"40000","incel":"000004","incer":"003000","ind":"4000","indling":"00500000","ine":"2000","inee":"03000","inerar":"0000400","iness":"050000","inga":"40000","inge":"40000","ingen":"005000","ingi":"40000","ingling":"00500000","ingo":"40000","ingu":"40000","ini":"2000","ini_":"05000","inia":"04000","inio":"00300","inis":"00100","inite_":"0500000","initio":"5000000","inity":"003000","ink":"4000","inl":"4000","inn":"2000","ino":"2100","inoc":"04040","inos":"00040","inot":"04000","ins":"2000","inse":"00300","insura":"0000050","int_":"20000","inth":"20400","inu":"0010","inus":"05000","iny":"4000","io":"200","io_":"4000","ioge":"00004","iogr":"00200","iol":"0100","iom":"0040","ionat":"000300","ionery":"0004000","ioni":"00030","ioph":"00500","iori":"00030","ios":"0400","ioth":"00500","ioti":"05000","ioto":"00400","iour":"04000","ip":"200","ipe":"0004","iphras":"0000004","ipi":"0030","ipic":"00400","ipre":"00404","ipul":"00300","iqua":"03000","iquef":"005000","iquid":"003000","iquit":"003030","ir":"400","ira":"0100","irab":"00040","irac":"04000","irde":"00050","irede":"000400","iref":"04000","irel":"04004","ires":"04000","irgi":"00500","iri":"0010","iride":"000500","iris":"00400","iritu":"000300","iriz":"55200","irmin":"004000","irog":"00040","iron_":"500000","irul":"00500","is_":"2000","isag":"00500","isar":"00300","isas":"00005","isc":"2010","isch":"00300","ise":"4000","iser":"00300","isf":"3000","ishan":"005000","ishon":"003000","ishop":"000500","isib":"00300","isid":"00040","isis":"05000","isitiv":"0050000","isk":"4040","islan":"000004","isms":"40000","iso":"0200","isomer":"0005000","isp":"0010","ispi":"00200","ispy":"00400","iss":"4010","issal":"004000","issen":"000004","isses":"004000","ista_":"004000","iste":"00100","isti":"00100","istly":"000400","istral":"4000000","isu":"0200","isus":"00500","ita_":"40000","itabi":"000400","itag":"04000","itam":"40050","itan":"03000","itat":"03000","ite":"2000","itera":"003000","iteri":"050000","ites":"00400","ith":"2000","iti":"0100","itia":"40000","itic":"42000","itica":"003000","itick":"550000","itig":"00300","itill":"005000","itim":"02000","itio":"20000","itis":"40000","itism":"040000","itom":"02550","iton":"40000","itram":"040000","itry":"00500","itt":"4000","ituat":"003000","itud":"05000","itul":"00300","itz_":"40000","iu":"010","iv":"200","ivell":"003000","iven_":"003000","iver_":"043000","ivers_":"0400000","ivil_":"005000","ivio":"00500","ivit":"00100","ivore":"050000","ivoro":"003300","ivot":"04300","iw":"450","ixo":"0040","iy":"400","izar":"40000","izi":"0004","izont":"500000","ja":"500","jacq":"00040","jap":"0040","je":"100","jers":"00050","jestie":"4000000","jesty":"400000","jew":"0003","jop":"0040","judg":"50000","ka_":"3000","kab":"0300","kag":"0500","kais":"00004","kal":"0004","kb":"010","ked":"0200","kee":"1000","keg":"0040","keli":"00500","kend":"03040","ker":"0100","kes":"0004","kest_":"030000","kety":"00400","kf":"030","kh":"004","ki":"010","ki_":"5000","kic":"5200","kill":"04000","kilo":"00005","kim":"0400","kin_":"04000","kinde":"000400","kiness":"0500000","king":"00040","kip":"0040","kis":"0004","kish":"05000","kk":"004","kl":"010","kley":"40000","kly":"4000","km":"010","knes":"05000","kno":"1200","kor":"0050","kosh":"00004","kou":"0300","kron":"00050","ks":"412","ksc":"0400","ksl":"0040","ksy":"0400","kt":"050","kw":"010","labic":"000300","labo":"04000","laci":"00004","lade":"04000","lady":"00300","lagn":"00040","lamo":"00030","land":"30000","landl":"000400","lanet":"000500","lante":"000400","larg":"00040","lari":"00030","lase":"00040","latan":"005000","lateli":"4000000","lativ":"400000","lav":"4000","lava":"00440","lb":"210","lbin":"00004","lc":"412","lce":"0004","lci":"0300","ld":"200","lde":"0200","ldere":"004000","lderi":"004000","ldi":"0004","ldis":"00500","ldr":"0300","ldri":"04000","lea":"0020","lebi":"00400","left":"00005","leg_":"50000","legg":"50000","lemat":"004000","lematic":"00050000","len_":"40000","lenc":"30000","lene_":"500000","lent":"10000","leph":"00300","lepr":"00400","lerab":"000050","lere":"00040","lerg":"30000","leri":"34000","lero":"04000","les":"0002","lesco":"005000","lesq":"50000","less":"30000","less_":"500000","leva":"03000","lever_":"0004000","levera":"0004000","levers":"0004000","ley":"3000","leye":"40000","lf":"200","lfr":"0500","lg":"414","lga":"0500","lgar":"00003","lges":"04000","lgo":"0003","lh":"230","liag":"00400","liam":"00200","liariz":"0000500","lias":"00400","liato":"004000","libi":"00500","licio":"500000","licor":"004000","lics":"40000","lict_":"400000","licu":"04000","licy":"03000","lida":"03000","lider":"000500","lidi":"30000","lifer":"000300","liff":"04000","lifl":"00400","ligate":"5000000","ligh":"30000","ligra":"004000","lik":"3000","lil":"4440","limbl":"000400","limi":"00030","limo":"00400","limp":"04040","lina":"04000","line":"14000","linea":"000300","lini":"00030","linker":"0000500","liog":"00500","liq":"4400","lisp":"00040","lit":"0100","lit_":"02000","litica":"5000000","litics":"0550000","liver":"000300","liz":"0100","lj":"400","lka":"0003","lkal":"03000","lkat":"00040","ll":"010","llaw":"04000","lle":"0200","llea":"05000","llec":"03000","lleg":"03000","llel":"03000","llen":"03040","llet":"03040","lli":"0020","llin":"02004","llina":"050000","llo":"0040","lloqui":"0000005","llout":"005000","llow":"05000","lm":"200","lmet":"05000","lming":"003000","lmod":"04000","lmon":"00004","ln":"212","lo_":"3000","lobal":"000500","loci":"00400","lof":"4000","logic":"300000","logo":"05000","logu":"30000","lomer":"000300","long":"50000","loni":"00040","loniz":"033000","lood":"00005","lope_":"500000","lopi":"00030","lopm":"03000","lora":"00004","lorato":"0040000","lorie":"005000","lorou":"000500","los_":"50000","loset":"000500","losophiz":"500000000","losophy":"50000000","lost":"00040","lota":"00400","lound":"000050","lout":"20000","lov":"4000","lp":"200","lpab":"00050","lpha":"03000","lphi":"05000","lping":"005000","lpit":"03000","lpl":"0400","lpr":"0500","lr":"410","ls":"212","lsc":"0400","lse":"0200","lsie":"04000","lt":"400","ltag":"00500","ltane":"000005","lte":"0100","lten":"00004","ltera":"000004","lthi":"00030","lties_":"0500000","ltis":"00004","ltr":"0100","ltu":"0002","ltura":"000030","lua":"0050","lubr":"00300","luch":"00004","luci":"00300","luen":"00300","luf":"0004","luid":"00500","luma":"00400","lumi":"50000","lumn_":"050000","lumnia":"5000000","luo":"0030","luor":"00030","lup":"4000","luss":"00004","luste":"000300","lut":"1000","lven":"05000","lvet":"05004","lw":"210","ly":"100","lya":"4000","lyb":"4000","lyme":"00500","lyno":"00300","lys":"2004","lyse":"05000","ma":"100","mab":"2000","maca":"00200","machine":"00500000","macl":"00400","magin":"000500","magn":"50000","mah":"2000","maid":"00005","mald":"40000","malig":"003000","malin":"005000","malli":"000400","malty":"000400","mania":"500000","manis":"000500","maniz":"000300","map":"4000","marine_":"00500000","mariz":"005000","marly":"000400","marv":"00030","masce":"005000","mase":"00040","mast":"00010","mate":"50000","math":"00003","matis":"003000","matiza":"4000000","mb":"410","mbat":"00045","mbil":"05000","mbing":"043000","mbiv":"00040","mc":"450","me_":"4000","med":"2000","med_":"40000","media":"500000","medie":"003000","medy":"05500","meg":"0020","melon":"000500","melt":"00040","mem":"0020","memo":"00013","men":"1000","mena":"00040","menac":"000500","mende":"000400","mene":"40000","meni":"00040","mens":"00004","mensu":"000005","ment":"30000","mente":"000400","meon":"00500","mersa":"050000","mes":"2000","mesti":"300000","meta":"00400","metal":"000300","mete":"00100","methi":"005000","metr":"04000","metric":"5000000","metrie":"0050000","metry":"003000","mev":"0040","mf":"410","mh":"200","mi_":"5000","mia":"0030","mida":"00040","midg":"00040","mig":"0004","milia":"300000","milie":"055000","mill":"04000","mina":"00040","mind":"30000","minee":"050000","mingl":"040000","mingli":"0005000","mingly":"0500000","mint":"00040","minu":"04000","miot":"00004","mis":"0200","miser_":"0004000","misl":"00050","misti":"000400","mistry":"0500000","mith":"40000","miz":"0200","mk":"400","ml":"410","mm":"010","mmary":"000500","mn":"410","mna":"0040","mnin":"04000","mno":"0040","mo":"100","mocr":"40000","mocratiz":"500000000","mod":"0021","mogo":"00400","mois":"00002","moise":"000500","mok":"4000","molest":"0050000","mome":"00300","monet":"000500","monge":"000500","monia":"000030","monism":"0004000","monist":"0004000","moniz":"003000","monol":"000004","mony_":"003000","mor":"0020","mora_":"400000","mos":"0002","mosey":"005000","mosp":"00300","moth":"00003","mouf":"05000","mous":"30000","mov":"0020","mp":"410","mpara":"000005","mparab":"0005000","mpari":"000050","mpet":"03000","mphas":"000004","mpi":"0200","mpia":"00040","mpies":"005000","mpin":"04100","mpir":"05000","mpis":"00500","mpori":"000300","mposite":"00005000","mpous":"040000","mpov":"00005","mptr":"00400","mpy":"0200","mr":"430","ms":"412","msh":"0400","msi":"0500","mt":"400","mu":"100","mular":"000054","mult":"50000","multi":"000003","mum":"3000","mun":"0002","mup":"4000","muu":"0040","mw":"400","na":"100","nab":"2120","nabu":"04000","nac_":"40000","naca":"00400","nact":"05000","nager_":"0005000","nak":"0004","nali":"00400","nalia":"005000","nalt":"40000","namit":"005000","nan":"0200","nanci":"000004","nanit":"000400","nank":"00004","narc":"00030","nare":"40000","nari":"00030","narl":"00040","narm":"05000","nas":"0400","nasc":"00040","nasti":"000500","nat":"0200","natal":"003000","natomiz":"00005000","nau":"0200","nause":"000300","naut":"30000","nave":"00040","nb":"414","ncar":"00005","nces_":"040000","ncha":"03000","ncheo":"050000","nchil":"050000","nchis":"030000","ncin":"00100","ncit":"00400","ncoura":"0000050","ncr":"0100","ncu":"0100","ndai":"04000","ndan":"05000","nde":"0100","ndest_":"0050000","ndib":"00040","ndif":"05200","ndit":"01000","ndiz":"03000","nduc":"05000","ndur":"00040","ndwe":"00200","ne_":"2000","near":"03000","neb":"0020","nebu":"00030","nec":"0020","neck":"50000","ned":"2000","negat":"004000","negativ":"00050000","nege":"50000","nela":"00400","neliz":"000500","nemi":"00500","nemo":"00400","nen":"1000","nene":"40000","neo":"3000","nepo":"00400","neq":"0020","ner":"0100","nerab":"000050","nerar":"040000","nere":"02000","neri":"04050","nerr":"00040","nes":"1000","nes_":"20000","nesp":"40000","nest":"20000","nesw":"40000","netic":"300000","nev":"0040","neve":"05000","new":"0040","nf":"030","ngab":"04000","ngel":"03000","ngene":"000440","ngere":"050000","ngeri":"030000","ngha":"00500","ngib":"03000","ngin":"00100","ngit":"05000","ngla":"04000","ngov":"00004","ngsh":"00500","ngu":"0100","ngum":"04000","ngy":"0200","nh":"414","nha":"0004","nhab":"00003","nhe":"0004","nia":"3400","nian":"00300","niap":"00400","niba":"00300","nibl":"00400","nid":"0040","nidi":"00500","nier":"00400","nifi":"00200","nificat":"00500000","nigr":"05000","nik":"0004","nim":"0100","nimiz":"003000","nin":"0100","nine_":"500000","ning":"00040","nio":"0040","nis_":"50000","nista":"000400","nit":"0200","nith":"04000","nitio":"300000","nitor":"030000","nitr":"00300","nj":"010","nk":"402","nkero":"050000","nket":"03000","nkin":"00300","nkl":"0100","nl":"410","nm":"050","nme":"0004","nmet":"00004","nn":"412","nne":"0004","nnial":"000300","nniv":"00040","nobl":"00040","noble":"003000","nocl":"05000","nod":"4320","noe":"3000","nog":"4000","noge":"00004","noisi":"000050","noli":"00540","nologis":"50000000","nomic":"300000","nomiz":"055000","nomo":"00400","nomy":"00300","non":"0040","nonag":"000400","noni":"00050","noniz":"050000","nop":"4000","nopoli":"5005500","norab":"000500","norary":"0040000","nosc":"40000","nose":"00040","nost":"00050","nota":"00500","nou":"1000","noun":"30000","novel":"000303","nowl":"00003","np":"014","npi":"0004","nprec":"000040","nq":"010","nr":"010","nru":"0004","ns":"212","nsab":"00500","nsati":"000004","nsc":"0040","nse":"0200","nses":"04300","nsid":"00001","nsig":"00004","nsl":"0200","nsm":"0030","nsoc":"04000","nspe":"00400","nspi":"05000","nstabl":"0000500","nt":"010","ntab":"00040","nters":"000030","nti":"0020","ntib":"05000","ntier":"000400","ntif":"00020","ntine":"030000","nting":"043000","ntip":"00040","ntrolli":"00000500","nts":"0040","ntume":"000300","nua":"0010","nud":"0040","nuen":"00500","nuffe":"000400","nuin":"03000","nuit":"30300","num":"0400","nume":"00100","numi":"05000","nun":"3040","nuo":"0300","nutr":"00300","nv":"012","nw":"014","nym":"0004","nyp":"0004","nz":"400","nza":"0300","oa":"400","oad":"0003","oales":"055000","oard":"00003","oase":"00040","oaste":"000050","oati":"00050","obab":"00330","obar":"05000","obel":"00040","obi":"0100","obin":"02000","obing":"005000","obr":"0300","obul":"00300","oce":"0100","och":"0004","ochet":"030000","ocif":"00003","ocil":"04000","oclam":"040000","ocod":"04000","ocrac":"003000","ocratiz":"00500000","ocre":"00003","ocrit":"500000","octora":"0000050","ocula":"003000","ocure":"050000","odded":"005000","odic":"00300","odio":"00030","odo":"0204","odor":"00003","oduct_":"0050000","oducts":"0050000","oel":"0400","oeng":"05000","oer":"0300","oeta":"00400","oev":"0300","ofi":"0200","ofite":"005000","ofitt":"000040","ogar":"02550","ogativ":"0050000","ogato":"040000","oge":"0100","ogene":"050000","ogeo":"05000","oger":"04000","ogie":"03000","ogis":"11000","ogit":"00300","ogl":"0400","ogly":"05200","ogniz":"300000","ogro":"04000","ogui":"00050","ogy":"1000","ogyn":"20000","oh":"012","ohab":"00005","oi":"002","oices":"000300","oider":"003000","oiff":"00004","oig":"0004","oilet":"005000","oing":"03000","ointer":"0000500","oism":"05000","oison":"005000","oisten":"0000500","oiter":"003000","oj":"050","ok":"200","oken":"03000","okie":"00500","ola":"0100","olan":"04000","olass":"000004","old":"0020","olde":"00010","oler":"00300","olesc":"030000","olet":"03000","olfi":"00400","oli":"0020","olia":"03000","olice":"030000","olid_":"005000","olif":"03040","olil":"05000","oling":"003000","olio":"05000","olis_":"050000","olish":"003000","olite":"050000","olitio":"0500000","oliv":"05000","ollie":"000040","ologiz":"0050000","olor":"00040","olpl":"00500","olt":"0020","olub":"00300","olume":"003000","olun":"00300","olus":"05000","olv":"0020","oly":"0200","omah":"00500","omal":"00050","omatiz":"0050000","ombe":"00200","ombl":"00400","ome":"0200","omena":"003000","omerse":"0050000","omet":"04000","ometry":"0050000","omia":"03000","omic_":"003000","omica":"003000","omid":"05000","omin":"00100","omini":"050000","ommend":"5000000","omoge":"000400","omon":"04000","ompi":"00300","ompro":"000005","on":"020","ona":"0010","onac":"00400","onan":"03000","onc":"0010","oncil":"300000","ond":"2000","ondo":"00500","onen":"03000","onest":"005000","ongu":"00400","onic":"00100","onio":"03000","onis":"00100","oniu":"05000","onkey":"003000","onodi":"004000","onomy":"003000","ons":"0030","onspi":"000004","onspira":"00000050","onsu":"00004","onten":"000004","onti":"00340","ontif":"000005","onum":"00500","onva":"00005","oo":"002","oode":"00050","oodi":"00050","ook":"0040","oopi":"00030","oord":"03000","oost":"00005","opa":"0200","oped":"00050","oper":"00100","opera":"300000","operag":"4000000","oph":"2000","ophan":"050000","opher":"050000","oping":"003000","opit":"03000","opon":"05000","oposi":"040000","opr":"0100","opu":"0010","opy":"0005","oq":"010","ora":"0100","ora_":"05000","orag":"04300","oraliz":"0050000","orange":"0050000","orea":"00050","oreal":"050000","orei":"00300","oresh":"000500","orest_":"0050000","orew":"00004","orgu":"00400","oria":"45000","orica":"003000","oril":"05000","orin":"00100","orio":"01000","ority":"003000","oriu":"03000","ormi":"00200","orne":"00020","orof":"05000","oroug":"003000","orpe":"00500","orrh":"30000","orse":"00400","orsen":"000500","orst":"00004","orthi":"003000","orthy":"003000","orty":"00400","orum":"05000","ory":"0100","osal":"00300","osc":"0020","osce":"00400","oscop":"030000","oscopi":"4000000","oscr":"05000","osie":"00440","ositiv":"0050000","osito":"003000","osity":"003000","osiu":"00040","osl":"0040","oso":"0200","ospa":"00400","ospo":"00400","osta":"00200","ostati":"0500000","ostil":"005000","ostit":"005000","otan":"04000","oteleg":"0000040","oter_":"003000","oters":"005000","otes":"04000","oth":"4000","othesi":"0005000","othi":"00034","otic_":"003000","otica":"005000","otice":"030000","otif":"03000","otis":"03000","otos":"00050","ou":"002","oubl":"00300","ouchi":"000050","ouet":"00500","oul":"0040","ouncer":"0000500","ound":"00020","ouv":"0050","oven":"00400","overne":"0000400","overs":"000030","overt":"004000","ovis":"03000","oviti":"000004","ovol":"05400","owder":"003000","owel":"00300","owest":"005000","owi":"0010","owni":"00050","owo":"0400","oya":"0010","pa":"100","paca":"00400","pace":"00400","pact":"00040","pad":"0400","pagan":"500000","pagat":"030000","pai":"0400","pain":"00004","pal":"0400","pana":"00040","panel":"000300","panty":"000400","pany":"00300","pap":"0010","papu":"00400","parabl":"0000500","parage":"0005000","pardi":"000500","pare":"30000","parel":"000500","pari":"04400","paris":"000400","pate":"00200","pater":"005000","pathic":"5000000","pathy":"005000","patric":"0040000","pav":"0004","pay":"3000","pb":"410","pd":"004","pe_":"4000","pea":"3040","pearl":"000040","pec":"0020","ped":"2200","pede":"30000","pedi":"30000","pedia":"000004","pedic":"000400","pee":"0400","peed":"00040","pek":"0004","pela":"00400","pelie":"000040","penan":"004000","penc":"04000","penth":"000400","peon":"00500","pera_":"040000","perabl":"0000500","perag":"040000","peri":"04000","perist":"0000500","permal":"0004000","perme":"000005","pern":"04000","pero":"00030","perti":"000300","peru":"00500","perv":"00010","pet":"0020","peten":"005000","petiz":"005000","pf":"400","pg":"400","ph_":"4000","phari":"000050","pheno":"000300","pher":"00400","phes_":"004000","phic":"00100","phie":"50000","phing":"005000","phisti":"5000000","phiz":"30000","phl":"0020","phob":"30000","phone":"300000","phoni":"500000","phor":"00040","phs":"4000","pht":"0030","phu":"5000","phy":"1000","pia":"0030","pian":"00004","picie":"004000","picy":"00400","pid":"0400","pida":"05000","pide":"00300","pidi":"50000","piec":"30000","pien":"00300","pigrap":"0040000","pilo":"00300","pin":"0020","pin_":"04000","pind":"00004","pino":"04000","pio":"3010","pion":"00004","pith":"03000","pitha":"005000","pitu":"00200","pk":"232","pl":"122","plan":"30000","plast":"000050","plia":"00030","plier":"000500","plig":"40000","plin":"00040","ploi":"00004","plum":"00040","plumb":"000040","pm":"410","pn":"230","poc":"0040","pod_":"50000","poem":"00500","poet":"00305","pog":"5040","poin":"00002","point":"500000","polyt":"000050","poni":"00400","pop":"0040","por":"1400","pory":"00400","pos":"1000","poss":"00010","pot":"0400","pota":"00400","poun":"50000","pp":"410","ppara":"000500","ppe":"0200","pped":"04000","ppel":"05000","ppen":"03000","pper":"03000","ppet":"03000","pposite":"00050000","pr":"002","praye":"000040","preci":"500000","preco":"000500","preem":"000300","prefac":"0000500","prela":"000400","prer":"00030","prese":"030000","press":"300000","preten":"0005000","prev":"00030","prie":"50040","print":"000043","pris":"00040","priso":"000030","proca":"030000","profit":"0000500","prol":"00030","prose":"000030","prot":"00010","ps":"212","pse":"0200","psh":"0040","psib":"04000","pt":"210","ptab":"00540","pte":"0200","pth":"0200","ptim":"00030","ptur":"00040","ptw":"0400","pub":"0003","pue":"0004","puf":"0004","pulc":"00030","pum":"0040","pun":"0020","purr":"00040","pus":"5000","put":"0020","pute":"50000","puter":"000300","putr":"00300","putted":"0004000","puttin":"0004000","pw":"030","qu":"002","quav":"00050","que_":"20000","quer":"30000","quet":"30000","rab":"2000","rabi":"00300","rache":"000040","racl":"05000","raffi":"000500","raft":"00040","rai":"0200","ralo":"00400","ramet":"000300","rami":"02000","raneo":"000050","range":"000400","rani":"04000","rano":"00500","raper":"000300","raphy":"300000","rarc":"00050","rare":"00004","raref":"000500","raril":"400000","ras":"0200","ration":"0000004","raut":"00040","ravai":"005000","ravel":"000300","razie":"005000","rb":"010","rbab":"04000","rbag":"04000","rbi":"0002","rbif":"00040","rbin":"02000","rbine":"050000","rbing_":"0050000","rbo":"0040","rc":"010","rce":"0200","rcen":"00004","rcha":"03000","rcher":"000400","rcib":"04040","rcit":"00400","rcum":"00003","rdal":"04000","rdi":"0020","rdia":"00040","rdier":"000400","rdin":"00004","rding":"003000","re_":"2000","real":"00100","rean":"00300","rearr":"005000","reav":"50000","reaw":"00400","rebrat":"0500000","recoll":"0005000","recompe":"00050000","recre":"004000","red":"2200","rede":"00100","redis":"003000","redit":"000500","refac":"004000","refe":"00200","refer_":"0050000","refi":"00300","refy":"00400","regis":"000300","reit":"00500","reli":"00100","relu":"00500","renta":"040400","rente":"000400","reo":"0010","repin":"005000","reposi":"0040000","repu":"00100","rer":"0104","reri":"04000","rero":"00004","reru":"00500","res_":"04000","respi":"004000","ressib":"0000500","rest":"00020","restal":"0050000","restr":"003000","reter":"004000","retiz":"004040","retri":"003000","reu":"0002","reuti":"005000","rev":"0002","reval":"004000","revel":"000300","rever_":"0505000","revers":"0050000","revert":"0050000","revil":"005000","revolu":"0005000","rewh":"00400","rf":"010","rfu":"0004","rfy":"0400","rg":"002","rger":"00300","rget":"03000","rgic":"03000","rgin":"00040","rging":"003000","rgis":"05000","rgit":"05000","rgl":"0100","rgon":"00040","rgu":"0300","rh":"004","rh_":"4000","rhal":"40000","ria":"0030","riab":"00040","riag":"00400","rib":"0400","riba":"00030","ricas":"000500","rice":"04000","rici":"40000","ricid":"500000","ricie":"004000","rico":"04000","rider":"000500","rienc":"003000","rient":"003000","rier":"00100","riet":"00500","rigan":"000500","rigi":"50000","riliz":"000300","riman":"500000","rimi":"00050","rimo":"30000","rimpe":"000400","rina":"02000","rina_":"500000","rind":"00040","rine":"00040","ring":"00040","rio":"0010","riph":"50000","riphe":"000050","ripl":"00200","riplic":"0005000","riq":"0400","ris":"0200","ris_":"04000","risc":"00040","rish":"03000","risp":"00040","ritab":"003030","rited_":"0500000","riter_":"0005000","riters":"0005000","ritic":"000300","ritu":"00200","ritur":"000500","rivel":"000500","rivet":"000300","rivi":"00030","rj":"030","rket":"03000","rkle":"00400","rklin":"004000","rl":"010","rle":"0004","rled":"02000","rlig":"04000","rlis":"04000","rlish":"005000","rlo":"0304","rm":"010","rmac":"00050","rme":"0200","rmen":"03000","rmers":"005000","rming":"003000","rming_":"0400000","rmio":"04000","rmit":"03000","rmy":"0400","rnar":"04000","rnel":"03000","rner":"04000","rnet":"05000","rney":"03000","rnic":"05000","rnis":"01004","rnit":"03000","rniv":"03000","rno":"0004","rnou":"04000","rnu":"0300","robl":"00030","roc":"0200","rocr":"00300","roe":"0040","rofe":"00100","rofil":"005000","rok":"0002","roker":"005000","role_":"500000","romete":"0005000","romi":"00040","romp":"00040","ronal":"000400","rone":"00040","ronis":"005400","ronta":"000400","room":"10000","root":"50000","ropel":"003000","ropic":"000300","rori":"00030","roro":"00500","rosper":"0005000","ross":"00040","rothe":"004000","roty":"00400","rova":"00400","rovel":"000500","rox":"0005","rp":"010","rpea":"04000","rpent":"050000","rper_":"005000","rpet":"03000","rph":"0044","rping":"003000","rpo":"0300","rr":"014","rrec":"00040","rref":"00040","rreo":"04000","rrest":"000400","rrio":"00040","rriv":"00040","rron":"00004","rros":"00004","rrys":"00004","rs":"402","rsa":"0100","rsati":"000500","rsc":"0040","rse":"0200","rsec":"03000","rsecr":"000400","rser_":"005000","rses":"00300","rsev":"00052","rsh":"0100","rsha":"05000","rsi":"0100","rsib":"04040","rson":"00003","rsp":"0100","rsw":"0500","rtach":"000004","rtag":"04000","rteb":"03000","rtend":"000040","rteo":"00050","rti":"0100","rtib":"00500","rtid":"00040","rtier":"040000","rtig":"03000","rtili":"000030","rtill":"000040","rtily":"040000","rtist":"040000","rtiv":"04000","rtri":"03000","rtroph":"0000004","rtsh":"00400","rua":"0030","ruel":"00340","ruen":"00300","rugl":"00400","ruin":"00300","rumpl":"000300","run":"0020","runk":"00005","runty":"000400","rusc":"05000","rutin":"000050","rve":"0040","rveli":"000040","rven":"03000","rver_":"005000","rvest":"050000","rvey":"03000","rvic":"03000","rviv":"00040","rvo":"0300","rw":"010","ryc":"0040","rynge":"500000","ryt":"0030","sa":"002","sab":"2100","sack":"50000","sacri":"000300","sact":"03000","sai":"5000","salar":"000004","salm":"00040","salo":"00500","salt":"00040","sanc":"30000","sande":"000400","sap":"0100","sata":"00500","satio":"503000","satu":"00030","sau":"0004","savor":"005000","saw":"5000","sb":"450","scant":"000045","scap":"00040","scav":"00005","sced":"04000","scei":"40000","sces":"04000","sch":"0002","scho":"04000","scie":"34000","scind":"500040","scle":"00005","scli":"04000","scof":"00004","scopy":"400000","scoura":"0000050","scu":"0100","sd":"450","se_":"4000","sea":"0040","seas":"00004","seaw":"00050","seco":"00230","sect":"30000","sed":"4400","sede":"00440","sedl":"05000","seg":"0020","segr":"00030","sei":"5000","sele":"00100","self":"50000","selv":"50000","seme":"40000","semol":"004000","senat":"000500","senc":"40000","send":"00040","sened":"050000","seng":"00050","senin":"050000","sentd":"400000","sentl":"400000","sepa":"00033","ser_":"41000","serl":"04000","sero":"00040","servo":"400000","ses":"0140","sesh":"00500","sest":"00050","seum":"50500","sev":"5000","seven":"000300","sewi":"00040","sex":"5000","sf":"430","sg":"230","sh":"020","sh_":"2000","sher":"00100","shev":"50000","shin":"00100","shio":"00300","ship":"30000","shiv":"00005","sho":"0004","shold":"005000","shon":"00003","shor":"00004","short":"000005","shw":"4000","sib":"0010","sicc":"05000","side_":"300000","sides":"500000","sidi":"50000","sidiz":"005000","signa":"400000","sile":"00040","sily":"40000","sin":"2100","sina":"02000","sine_":"500000","sing":"03000","sio":"1000","sion":"50000","siona":"000050","sir":"0020","sira":"00050","sis":"1000","sitio":"300000","siu":"5000","siv":"1000","siz":"5000","sk":"002","ske":"4000","sket":"03000","skine":"005000","sking":"005000","sl":"012","slat":"03000","sle":"0200","slith":"000005","sm":"210","sma":"0300","small":"000003","sman":"00003","smel":"00004","smen":"05000","smith":"500000","smold":"000054","sn":"014","so":"100","soce":"00400","soft":"00003","solab":"004000","sold":"00032","solic":"003000","solv":"50000","som":"3000","son_":"34000","sona":"00004","song":"00040","sop":"0400","sophic":"5000000","sophiz":"0500000","sophy":"050000","sorc":"00050","sord":"00050","sov":"4000","sovi":"00500","spa":"2000","spai":"50000","span":"00040","spend":"000040","speo":"25000","sper":"20000","sphe":"02000","spher":"300000","spho":"00005","spil":"00004","sping":"005000","spio":"40000","sply":"04000","spon":"04000","spor":"00004","spot":"40000","squall":"0000040","sr":"010","ss":"200","ssa":"0100","ssas":"00003","ssc":"0250","ssel":"03000","sseng":"050000","sses_":"040000","sset":"05000","ssi":"0100","ssie":"04000","ssier":"000400","ssily":"005000","ssl":"0400","ssli":"00400","ssn":"0400","sspend":"0000004","sst":"0020","ssura":"000050","ssw":"0050","st_":"2000","stag":"02000","stal":"02000","stami":"000040","stand":"500000","stap":"04040","stat_":"500000","sted":"04000","sterni":"0000050","stero":"050000","stew":"00020","stewa":"000050","sthe":"03000","sti":"0020","sti_":"04000","stia":"05000","stic":"01000","stick":"500000","stie":"04000","stif":"03000","sting":"003000","stir":"50000","stle":"01000","stock":"500000","stoma":"000030","stone":"500000","stop":"04000","store":"300000","str":"0040","strad":"040000","stratu":"5000000","stray":"040000","strid":"040000","stry":"40000","stw":"4030","sty":"0200","su":"100","sual":"00100","sub":"0043","sug":"0023","suis":"00500","suit":"00003","sul":"0400","sum":"0020","sumi":"00030","sun":"0020","sur":"0020","sv":"400","sw":"002","swo":"4000","sy":"040","syc":"4000","syl":"3000","syno":"00050","syrin":"005000","ta":"100","ta_":"3000","tab":"2000","tables":"0050000","taboliz":"50000000","taci":"40000","tado":"00500","taf":"4004","tailo":"000500","tal":"0020","tala":"00500","talen":"000500","tali":"00030","talk":"40000","tallis":"0004000","talog":"005000","tamo":"00500","tande":"000400","tanta":"000003","taper":"005000","tapl":"00500","tara":"00040","tarc":"40000","tare":"40000","tariz":"003000","tase":"00040","tasy":"00500","tatic":"400000","tatur":"004000","taun":"00004","tav":"0004","taw":"2000","taxis":"000400","tb":"210","tc":"400","tch":"0400","tchet":"000500","td":"410","te_":"4000","teadi":"000040","teat":"40000","tece":"00004","tect":"50000","ted":"2100","tedi":"00500","tee":"1000","teg":"0004","teger":"005000","tegi":"00500","tel_":"30000","teli":"00004","tels":"50000","tema":"00202","temat":"000300","tenan":"300000","tenc":"30000","tend":"30000","tenes":"400000","tent":"10000","tentag":"0004000","teo":"1000","tep":"0040","tepe":"00500","terc":"00030","terd":"50030","teri":"10000","teries":"0005000","teris":"000300","teriza":"0000500","ternit":"5000000","terv":"00050","tes_":"40000","tess":"40000","tess_":"030000","tethe":"000050","teu":"3000","tex":"3000","tey":"4000","tf":"210","tg":"410","th_":"2000","than":"00004","the":"0020","thea":"40000","theas":"003000","theat":"000500","theis":"000300","thet":"30000","thic_":"005000","thica":"005000","thil":"40000","think":"500000","thl":"4000","thode":"005000","thodic":"5000000","thoo":"40000","thorit":"0000500","thoriz":"0005000","ths":"2000","tia":"1000","tiab":"00400","tiato":"004000","tib":"2020","tick":"40000","tico":"04000","ticu":"04010","tidi":"50000","tien":"30000","tif":"0002","tify":"00500","tig":"2000","tigu":"50000","tillin":"0000500","tim":"1000","timp":"40000","timul":"000500","tin":"2100","tina":"02000","tine_":"300000","tini":"30000","tio":"1000","tioc":"00500","tionee":"0000500","tiq":"5000","tisa":"00300","tise":"30000","tism":"00040","tiso":"00500","tisp":"00040","tistica":"50000000","titl":"00300","tiu":"0040","tiv":"1000","tiva":"00040","tiz":"1000","tiza":"00300","tizen":"003000","tl":"200","tla":"0500","tlan":"00004","tle_":"30000","tled":"30000","tles_":"300000","tlet_":"050000","tlo":"0500","tm":"410","tme":"0004","tn":"212","to":"100","tob":"0030","tocrat":"0050000","todo":"40000","tof":"2000","togr":"00200","toic":"00500","toma":"00200","tomb":"00040","tomy":"00300","tonali":"0004000","tonat":"003000","tono":"40000","tony":"40000","tora":"00200","torie":"003000","toriz":"000500","tos":"0002","tour":"50000","tout":"40000","towar":"003000","tp":"410","tra":"1000","trab":"00030","trach":"000500","traci":"000004","tracit":"0000400","tracte":"0000400","tras":"00004","traven":"0005000","traves":"0000505","tref":"00050","trem":"00040","tremi":"000050","tria":"50000","trices":"0005000","tricia":"5000000","trics":"400000","trim":"20000","triv":"00040","tromi":"000500","troni":"000050","trony":"400000","trophe":"0005000","trosp":"000300","trov":"00030","trui":"00050","trus":"00004","ts":"412","tsc":"0400","tsh":"0004","tsw":"0400","tt":"432","ttes":"04000","tto":"0500","ttu":"0004","tu":"100","tua":"0010","tuar":"00300","tubi":"00400","tud":"0002","tue":"4000","tuf":"4004","tui":"5030","tum":"3000","tunis":"004000","tup_":"23000","ture":"30000","turi":"50000","turis":"000300","turo":"00050","tury":"00500","tus":"3000","tv":"400","tw":"004","twa":"4100","twis":"00004","two":"4000","ty":"100","tya":"4000","tyl":"2000","type":"00003","typh":"00500","tz":"400","tze":"0040","uab":"4000","uac":"0004","uana":"00500","uani":"00040","uarant":"0005000","uard":"00020","uari":"00030","uart":"00030","uat":"0100","uav":"0004","ube":"0040","ubel":"04000","uber":"03000","ubero":"040000","ubi":"0140","ubing":"045000","uble_":"030000","uca":"0300","ucib":"00040","ucit":"00400","ucle":"00003","ucr":"0300","ucu":"0300","ucy":"0400","udd":"0050","uder":"00300","udest":"005000","udev":"00004","udic":"01000","udied":"003000","udies":"003000","udis":"00500","udit":"05000","udon":"04000","udsi":"00400","udu":"0400","uene":"04000","uens":"00004","uente":"000400","ueril":"000400","ufa":"3000","ufl":"0300","ughen":"000300","ugin":"00500","ui":"202","uiliz":"000500","uin":"0040","uing":"01000","uirm":"00040","uita":"00004","uiv":"0003","uiver_":"0004000","uj":"050","uk":"400","ula":"0100","ulab":"00050","ulati":"050000","ulch":"00004","ulche":"500000","ulder":"003000","ule":"0040","ulen":"01000","ulgi":"00400","uli":"0020","ulia":"05000","uling":"003000","ulish":"005000","ullar":"004000","ullib":"004040","ullis":"004000","ulm":"4030","ulo":"0140","uls":"4000","ulses":"000500","ulti":"00100","ultra":"000003","ultu":"40000","ulu":"0300","ulul":"00500","ulv":"0050","umab":"00500","umbi":"00400","umbly":"004000","umi":"0100","uming":"043000","umoro":"000050","ump":"0020","unat":"00004","une":"0200","uner":"00400","uni":"0100","unim":"00400","unin":"02000","unish":"005000","univ":"00030","uns":"0034","unsw":"00400","untab":"000300","unter_":"0040000","untes":"004000","unu":"0004","uny":"0050","unz":"0050","uors":"04000","uos":"0500","uou":"0100","upe":"0100","upers":"000050","upia":"05000","uping":"003000","upl":"0300","upp":"0030","upport":"0000005","uptib":"000500","uptu":"00004","ura":"0100","ura_":"40000","urag":"04000","uras":"04000","urbe":"00400","urc":"0004","urd":"0010","ureat":"000500","urfer":"004000","urfr":"00400","urif":"03000","urific":"0004000","urin":"00100","urio":"03000","urit":"01000","uriz":"00300","url":"0020","urling_":"00050000","urno":"00400","uros":"00004","urpe":"00400","urpi":"00400","urser":"000500","urtes":"005000","urthe":"003000","urti":"00004","urtie":"004000","uru":"0300","us":"200","usad":"05000","usan":"05000","usap":"00400","usc":"0002","usci":"00300","usea":"00050","usia":"05000","usic":"03000","uslin":"004000","usp":"0010","ussl":"00500","ustere":"0050000","ustr":"00100","usu":"0200","usur":"00004","utab":"00040","utat":"03000","ute_":"40000","utel":"40000","uten":"40000","uteni":"000040","uti":"4120","utiliz":"0005000","utine":"030000","uting":"003000","utiona":"0000050","utis":"04000","utiz":"55000","utl":"0410","utof":"00500","utog":"00050","utomatic":"000500000","uton":"05000","utou":"04000","uts":"0004","uu":"030","uum":"0040","uv":"012","uxu":"0003","uze":"0040","va":"100","va_":"5000","vab":"2140","vacil":"000500","vacu":"00030","vag":"0004","vage":"00400","valie":"005000","valo":"00050","valu":"00010","vamo":"00500","vaniz":"005000","vapi":"00500","varied":"0005000","vat":"3000","ve_":"4000","ved":"4000","veg":"0003","vel_":"03000","velli":"000300","velo":"00400","vely":"04000","venom":"000300","venue":"050000","verd":"04000","vere_":"500000","verel":"040000","veren":"030000","verenc":"0005000","veres":"040000","verie":"000300","vermin":"0000040","verse":"300000","verth":"000300","ves":"0420","ves_":"40000","veste":"000400","vete":"00400","veter":"000300","vety":"00400","viali":"005000","vian":"50000","vide_":"500000","vided":"500000","viden":"430000","vides":"500000","vidi":"50000","vif":"0300","vign":"00500","vik":"0004","vil":"2000","vilit":"500000","viliz":"033000","vin":"0100","vina":"40400","vinc":"02000","vind":"00050","ving":"40000","viol":"00030","vior":"03040","viou":"00100","vip":"0040","viro":"00500","visit":"000300","viso":"00300","visu":"00300","viti":"40000","vitr":"00030","vity":"40000","viv":"3000","vo_":"5000","voi":"0004","vok":"3000","vola":"00400","vole":"05000","volt":"50000","volv":"30000","vomi":"00050","vorab":"000500","vori":"00004","vory":"00400","vota":"00400","votee":"400000","vv":"404","vy":"040","wabl":"05000","wac":"2000","wager":"005000","wago":"00050","wait":"00005","wal_":"05000","wam":"0004","wart":"00040","wast":"00040","wate":"00100","waver":"005000","wb":"010","wearie":"0005000","weath":"000003","wedn":"00040","weet":"00003","weev":"00050","well":"00040","wer":"0100","west":"00003","wev":"0300","whi":"0004","wi":"002","wil":"0002","willin":"0000500","winde":"000400","wing":"00040","wir":"0004","wise":"30000","with":"00003","wiz":"0005","wk":"040","wles":"00400","wlin":"00300","wno":"0400","wo":"102","wom":"0001","woven":"005000","wp":"050","wra":"0004","wri":"0004","writa":"000004","wsh":"0300","wsl":"0040","wspe":"00400","wst":"0540","wt":"400","wy":"004","xa":"010","xace":"00050","xago":"04000","xam":"0003","xap":"0400","xas":"0005","xc":"032","xe":"010","xecuto":"0040000","xed":"0200","xeri":"00040","xero":"00500","xh":"010","xhi":"0002","xhil":"00005","xhu":"0004","xi":"030","xia":"0050","xic":"0050","xidi":"00500","xime":"04000","ximiz":"005000","xo":"030","xob":"0400","xp":"030","xpand":"000040","xpecto":"0000005","xped":"00030","xt":"012","xti":"0300","xu":"010","xua":"0030","xx":"004","yac":"0500","yar":"3004","yat":"0500","yb":"010","yc":"010","yce":"0200","ycer":"00500","ych":"0300","yche":"00040","ycom":"00004","ycot":"00004","yd":"010","yee":"0500","yer":"0100","yerf":"04000","yes":"0004","yet":"0040","ygi":"0500","yh":"430","yi":"010","yla":"0300","yllabl":"0000500","ylo":"0300","ylu":"0500","ymbol":"000005","yme":"0004","ympa":"00003","ynchr":"003000","ynd":"0050","yng":"0050","ynic":"00500","ynx":"5000","yo":"014","yod":"0050","yog":"0450","yom":"0004","yonet":"005000","yons":"04000","yos":"0400","yped":"04000","yper":"00005","ypi":"0030","ypo":"0300","ypoc":"04000","ypta":"00200","ypu":"0500","yram":"00050","yria":"00500","yro":"0300","yrr":"0040","ysc":"0040","yse":"0320","ysica":"003000","ysio":"00300","ysis":"30000","yso":"0400","yss":"0004","yst":"0010","ysta":"00300","ysur":"00004","ythin":"030000","ytic":"00300","yw":"010","za":"001","zab":"0520","zar":"0002","zb":"400","ze":"200","zen":"0040","zep":"0040","zer":"0100","zero":"00300","zet":"0004","zi":"210","zil":"0400","zis":"0400","zl":"500","zm":"400","zo":"100","zom":"0040","zool":"00500","zte":"0004","zz":"412","zzy":"0400"};
-Hyphenator.updatePatternsLoadState('en',true);
+// load english patterns
+﻿Hyphenator.languages.en = {
+	leftmin : 2,
+	rightmin : 2,
+	shortestPattern : 2,
+	longestPattern : 8,
+	specialChars : '',
+	patterns : {
+		3 : 'a2da2fai2a1ja2n4ao2bfb1jbk44bp2btb1v1cac3c2ch1cick1c5n1coc1q1cyd1bd5cd1jd1m1dod1p1dr1dud1vd1wd2ye1fei2e1je1q4eu1fa4fd4fh1fi4fm4fn1fo2ft3fu1fy1gag3bgd4gl2g1m1gog3p1grgs2g3w1gyh1bh1fh1h4hkh1w2id2igi3hi3j4ik2io2ip4iri1u2iv4iy5ja1jek1bk3fkh4k1ikk4k1lk1mk5tk1w2ld2lf4ljl1l2lm2lp4lt1ly1ma2mh4mkm1m1mo4mt1mu4mw1nan3fn1jn5mn1qn1rn1t4nz4oaoi2o5j2oko2noo2o1qou21papd44pf4pgpr2p3wqu2r1br1cr1frg2rh4r3jr1lr1mr1pr1wsa2s2hsk21sos1r2ss1su4svsw2s4y1ta4tc2tl1to1tu4tvtw41ty4tzu5j4uk2usu3u1vav4yw1bwi2w4kw5p4wtwy4x1ax1ex1hx3ix3ox3px1uxx4y1by1cy1dy1iy1wza14zb2ze5zl4zm1zo',
+		4 : '_ch4_ci2_eb4_eg2_es3_eu3_ga2_ge2_he2_in1_le2_me2_od2_os3_sh2_si2_st4_sy2_ta4_te4_th2_ti2_up3_ye44ab_abe24abr2adi4aduae4raff4ag1iag1na2goa4gya3haa3heah4la3hoa5ia2aleal1i4alm4amaa2mo4and2angano4a2pla3pu2a2rar1iar2par3q4as_as4la2ta4atha1tra2tua2tyau4bau3ra2vaav1iaw3iaws4aye4ays45ba_1batba4z2b1bb2be4b1d4be_1bel3betbe3w4b3hbi2bbi4d3bie1bilbi2tb2l2b4lo4b1m4b3n3bodbo4e3boobt4lb4tob3trbu4n4b5w5by_bys42ce_3cei1cen3cepcet4cew44ch_che23ciaci5c4cii2cim2cin5cizck3icly4coe22cogcoi4cov1cri22c1tc2tec4twcud5c4ufc4ui3cun1cuscze41d2a5da_4daf2dag3dat5dayd1d42de_d4em1dende1pd3eqdes2de1tde1v4dey4d1fd4gadg1id2gyd1h25di_3didd1ifd1in1diodir2dis1d5k22dly3do_5doed4ogd4or3dosdo4v3doxdre44dryds4pd4swd4syd2thdu2cdu4gdu4n4dup5dynead1ea4lea2tea2v2e1be3bre1ceec2ie1cre1cu4edi4edoee2cee2fee2me5ex1effeg5n5egye1h4e5icei5deig2e1lael2fel2iem5be1mee3my4enn4enoe5ofeo2ge3ole1oreos4e4ote5owe2pae1poer1a2erber1her1i2eroer1s4erues2c4eshe1sie1sp2esses4w4etnet5ze5une3upeus4e1vie5vue1wae3wh1exp5eyceys44fag5far4f5b4fe_fe4b2fedfer1fev44f1ff2fyfi3a2finf4l25fonfo2rfos54f5pfri22f3sf4tof2ty4fuggaf42gam4gaz2ge_2ged1gen1geoge4vg2geggo45gi_g1icgil45gio3girgi4u5giv3gizgla41gle3glog4mygn4ag1nig1no3go_gob55goegon25googov1g4rogth3gu4a2gue3gun3gusha4m5hazh4edhe2nhep5h1eshe4theu4hi4phi2vh2lo4h1m2h1nho4g4h5p4hr4h4shh4tyhu4ghu4thy2s2i1ai2aliam4i2anibe4i1bli5boi1br4ich2iciid5di2dii4dri2du2ie4i3et4if_i3fl4ift4igii2goi1lail5fil1i4ilnil3vim1ii2mu2in_4ind2ine2ini4ink4inl2inn2insin1u4iny4io_i1olio4mi4osipe4ip3ii1rair1i2is_4ise3isfi2sois1pi2su2ite2ithi1ti4itt4i5wix4oizi4ja4pjew3jo4p3ka_k3abk5agkal4k2ed1keeke4gk1erkes45ki_k4imki4pkis44klyko5rk3ouk4scks4lk4sy4lav2l1blce4l3cil2deldi4l3drle2ales23leyl5frl5galgo32l3h3likl1itl1izlka3l2lell2ill4o3lo_4lof4lovl4pll5pr4l1rl4scl2sel1tel1trltu2lu5aluf4lu3o4lup1lut2l1w4lya4lyb2mab2mah4map4m1b4m5c4me_2medme2gme2m1men2mesme4v4m1f5mi_mi3amig4m2ism2iz4m1l4m1nmn4amn4o4mokmo2rmos2mo2v4m1pm2pim2py4m3rm4shm5si3mummun24mupmu4unak4n2ann4asn2atn2aun1crn1cun1de2ne_ne2bne2c2ned1nen3neone2qn1er1nesne4vne4wn1gun2gynha4nhe4ni4dnik4n1imn1inni4on2it4nk2n1kl4n1lnme4nne43noe4nogno4n4nop1noun1p4npi4nru4ns4cn2sen2slns3mnt2int4snu1anu4dn4umn3uon1v2n1w4nym4nyp4n3zaoad3o1bio3bro1ceoch4o4elo3ero3evo2fio1geo4gl1ogyo1h2oig4o1laol2dol2iol2tol2vo2lyo2meon1aon1c2ondon3soo4ko2pa2opho1prop1uopy5o1rao1ryos2cos4lo2so4othou4lou5vow1io4wooy1ap4adp4aip4alpa1ppav43pay4p1b4pe_pe2cp4eepek4pe2t4ph_ph2l4phsph3t5phu1phypi3ap4idpi2n4p1m2p3npo4cpo4p1posp4ot4p1pp2pep2seps4h2p1tp2tep2thp4twpub3pue4puf4pu4mpu2n5puspu2t2rabr2air2asrbi2rb4or2cerd2i2re_re1oreu2rev2rfu4r4fyr1glr3gu4rh_ri3ar4ibri1or4iqr2isrle4r2mer4myrno4r3nur2ocro4erok2rox5r3por1r44rs2r1sars4cr2ser1shr1sir1spr5swr1tiru3aru2nrv4er3vory4cry3t5sais1apsau45saw4s5bsch2s1cu4s5d4se_se4ase2g5sei5sev5sex4s3f2s3g2sh_sho44shwsi1b1siosi2r1sis5siu1siv5siz4skes1l2s2le2s1ms3mas1n43soms4op4sov2spas1sas1sis4sls4snss2tss5w2st_st2ist4rs2tys4ulsu2msu2nsu2r4swo4syc3syl3ta_2tabta2ltav42taw2t1bt4ch4t1d4te_1teeteg41teote4p3teu3tex4tey2t1f4t1g2th_th2e4thl2ths1tiatif22tig1tim1tio5tiqti4u1tiv1tizt5lat5lo4t1mtme4to3b2toftos24t1p1trat4sctsh4t4swt5tottu4tu1atud24tue3tum3tus4two4tya2tyltz4e4uabuac4u1atuav4ub4eu3cau3cru3cuu4cyud5du4du3ufau3fl2ui2ui4nuiv3u1laul4eul2i4ulsu3luul5vu1mium2pu2neu1niunu4un5yun5zu5osu1ouu1peu3plup3pu1raurc4ur1dur2lu3ruusc2us1pu2suuts4uu4mu1v2uxu3uz4e5va_vag43vat4ve_4vedveg3v3ifvik42vilv1invi4p3viv5vo_voi43vok4vv42wacwam4w1erw3evwhi4wil2wir4wiz5w4no1wo2wom1wra4wri4w3shws4lxam3x4apxas5x3c2x2edxhi2xhu4xi5axi5cx4obx1t2x3tixu3ay5acy5aty2cey3chy5eey1eryes4ye4ty5gi4y3hy3lay3loy5luyme4yn5dyn5g5ynxy1o4yo5dyom4y4osyp3iy3poy5puy3royr4rys4cy4soyss4ys1tzar2ze4nze4pz1erzet42z1iz4ilz4iszo4mzte4z4zy',
+		5 : '_ach4_af1t_al3t_an5c_ang4_ant4_ar5s_as3c_as1p_as1s_au1d_av4i_awn4_ba4g_ber4_bri2_ca4t_co3e_co4r_de3o_do4t_du4c_eer4_el5d_en3g_en3s_eye5_fes3_gi5a_gi4b_go4r_hes3_het3_hi3b_hov5_id4l_im3m_ine2_in2k_in3s_ir5r_is4i_ju3r_la4m_len4_lep5_lev1_li4g_li2n_li3o_li4t_mis1_ni4c_odd5_or3c_or1d_or3t_oth3_out3_pi4e_pi2t_ra4c_ree2_res2_ri4g_ro4q_ru4d_se2n_til4_to4p_un1a_un1e_un5k_un5o_un3u_ure3_us5aa5bala5banabi5aab3ula4carac1er4a2cia3cieac1ina3cioac3ulac4uma3diaa3dioa3dita5diuad4lead3owad4sua3ducad5uma4gabaga4nage4o4ageu4ag4l3agogag5ula3ic_ai5lya4i4nain5oak1enal5abal3ada4lar4aldiali4ea4ly_4alys5alyt3alyzam5abam3agam3icam5ifam1ina5mona3naran1dla5neea3nena3neuan1glan3ioa3nipan3ita3niuan5otan2saan4snan2span4st4antoan2tran4twan3uaan3ula5nurapar4ap5at4aphiap3inapoc5aque5ar3alara3par4ata5rauaraw4ar4dra3reear4fiar4flar4imar3ioar2izar2mia3rooarre4ar4saar2shas4abashi4a3siba3sicask3ia4socas5phas4shas1trat5acat5apate5cat5evat4ho4ati_a5tiaat1icat3ifa4toga2toma4topa4tosat4skat5teat4that5uaat5ueat3ulaugh3au3guau4l2aun5dau1thav3aga5vanav3igav5oca1vor3awayaw4lyax4icax4iday5alazz5iba4gebal1aban4eban3ib3berbeak4beat34be2dbe3dabe3debe3dibe3gibe5gube1libe3lo4be5mbe5nu4bes4be3spbe5trbe3twbe5yobi5enbi4er2b3ifbin4dbi5oubi3trb5itzb4le_blen4b3lisbne5gbod3ibon4a5bor_bor5d5bore5bori5bos4b5otaboth5bo4to4brit2b5s2bsor4bu4gabu3libumi4bu3re5bust4butab5utoca1blcach44cag42c5ah4calocan5dcan4ecany44casyca4thccha5cci4accon44ced_5cel_3cell3cenc4ceni3cent4cesaces5t4ched5chio3chitchi2z3cho2ch4ticia5r4cierci4la3cilic4inac1ing5cinocion44cipeci3ph2c1it1c4l44clarcle4m4clicclim4co5agco4grcol5i5colocon4ac4onecon3gcon5tco3paco4pl4corbcos4ecove4cow5acoz5eco5zi5credcre4vcri5fc4rincris4cru4d4c3s2cta4bc3terctu4r5culicu2mac3umecu4micu3picu5py3c4ut4cutrdach4da2m2dan3gdard5dark54dary4dato5dav4dav5edeaf52d1ed4dee_de5ifde5lo5dem_de3node3nude3padepi4de2pud4erh5dermder5sd2es_de1scde4sude2todia5bd4ice3dictdi3ge1dina5dinidio5gdi4pldi1re5disid2iti1di1v4d5la3dle_3dled2d3lo4d5lu4d1n4do5de2d5ofdo4ladoli4doni4doo3ddop4p4drai5drendri4bdril4dro4p4drow2d1s2d1u1ad1ucadu5eld3uledu4pedy4sedys5pe1a4be3actea4gee5andear3aear4cear5kear2tea5spe3asseast3eav5ieav5oe4bene4bite4cadecca5e4cibec3imeci4te2cole2corec4tee4cul2e2da4ed3dede4se3diaed3ibed3imed1itedi5ze4doledon2e4drie4duleed3ieel3iee4lyee4naee4p1ee2s4eest4ee4tye4ficefil43efit4egaleger4eg5ibeg4ice4go_e4goseg1ule5gureher4ei5gle3imbe3infe1ingeir4deit3eei3the5itye4judeki4nek4lae4la_e4lace4lawe3lea5elece4lede5lene1lese5lime3lioe2lis4ellaello4e5locel5ogel2shel4tae5ludel5uge4mace4mage5mane2mele4metemi4ee4misem3izemo4gem3pie4mulemu3ne5neae5neeen3eme3newe5niee5nile3nioen3ite5niu5enizeno4ge4nosen3oven4swen3uaen5ufe3ny_4en3ze4oi4eo3reeo4toe5oute3paie5pelephe4e4plie3proep4she4putera4ber3arer4bler3ch2ere_ere4qeret4e1rio4eriter4iueri4ver3m4er3noer5obe5rocero4rer1ou4ertler3tweru4te1s4ae2scae3scres5cue1s2ee2sece3shae2sice2sidesi4ues4mie2sole2son2estre2sureta4be3teoet1icetin4e5tire3trae3treet3uaet5ymeu3roeute4eu5tre2vase5veaev1erev3idevi4le4vinevi4ve5voce4wage5weeewil5e3wit5eye_fa3blfab3rfa4cefain4fa3ta4fatofeas44feca5fectfe3life4mofen2d5ferrf4fesf4fief4flyfic4i4ficsfi3cufil5i4fily5finafi2nefin4nflin4f2ly5fon4tfor4ifra4tf5reafril4frol5fu5elfu5nefu3rifusi4fus4s4futa5gal_3galiga3log5amo4ganogass4gath3geez44gely4geno4genyge3omg4ery5gesigeth54getoge4ty4g1g2g3gergglu5gh3ingh4to1gi4agia5rg4icogien5gir4lg3isl5glasgli4bg3ligglo3rg4na_g2ning4niog4nongo3isgo3ni5gos_g4raigran24graygre4n4gritgruf4g5ste4gu4tgy5rahach4hae4mhae4th5aguha3lahan4ghan4khap3lhap5thar2dhas5shaun4haz3a1head3hearh5elohem4phena4heo5rh4erah3ernh3eryhi5anhi4cohigh5h4il2h4inahir4lhi3rohir4phir4rhis4s4h1l4hlan4hmet4h5odshoge4ho4mahome3hon4aho5ny3hoodhoon4ho5ruhos4ehos1p1houshree54h1s2h4tarht1enht5eshun4thy3pehy3ph4iancian3iia5peiass4i4atuib5iaib3inib3lii5bun4icam5icap4icaricas5i4cayiccu44iceoi5cidi2cipi4cly4i1cr5icrai4cryic4teictu2ic4umic5uoi3curi4daiide4si5dieid3ioid1itid5iui3dlei4domid3owid5uoied4eield3ien4ei5enni1er_i3esci1estif4fri3fieiga5bi3gibig3ilig3inig3iti4g4lig3orig5oti5greigu5iig1ur4i5i4i3legil1erilev4il3iail2ibil3io2ilitil2izil3oqil4tyil5uri4mag4imet4imitim4nii3mon4inavi3nee4inga4inge4ingi4ingo4ingui5ni_i4niain3ioin1is2i1noino4si4notin3se2int_i5nusioge4io2grion3iio5phior3iio5thi5otiio4toi4ourip4icip3uli3quaira4bi4racird5ei4refi4resir5giir4isiro4gir5ulis5agis3arisas52is1cis3chis3eris3ibisi4di5sis4is4k4ismsis2piis4py4is1sis1teis1tiis5us4ita_i4tagi3tani3tatit4es4itiait3igi2tim2itio4itis4itonit5ryi5tudit3ul4itz_iv5ioiv1it4izarjac4qjer5s5judgkais4ke5like4ty5k2ick4illkilo5k4in_kin4gk5ish4kleyk5nes1k2nokosh4kro5n4k1s2l4abolaci4l4adela3dylag4nlam3o3landlar4glar3ilas4elbin44l1c2ld5isl4drile4bileft55leg_5legg4len_3lenc1lentle3phle4prler4e3lergl4ero5lesq3lessl3eva4leye4l1g4lgar3l4gesli4agli2amli4asli5bi4licsl4icul3icyl3ida3lidil4iffli4fl3lighlim3ili4mol4inalin3ili5og4l4iqlis4pl2it_l3kallka4tl4lawl5leal3lecl3legl3lell5lowl5metl4modlmon42l1n2lo4cil5ogo3logu5longlon4ilood5lop3il3opmlora45los_los4tlo4ta2loutlpa5bl3phal5phil3pit2l1s2l4sielt5aglten4lth3iltis4lu3brluch4lu3cilu3enlu5idlu4ma5lumiluo3rluss4l5venly5mely3no2lys4l5ysema2cama4cl5magnmaid54maldmar3vmas4emas1t5matemath3m5bilmbi4v4med_mel4tmen4a4menemen4imens43mentme5onme4tame1tem4etrmid4amid4gm4illmin4a3mindmin4tm4inumiot4mis5l4mithm4nin4mocrmo2d1mo4gomois2mo3memo3spmoth3m5ouf3mousm3petmpi4am5pirmp5ismpov5mp4tr4m1s25multn4abu4nac_na4can5actna4li4naltnank4nar3c4narenar3inar4ln5armnas4c3nautnav4e4n1b4ncar5n3chanc1innc4itn4dain5danndi4bn1ditn3dizn5ducndu4rnd2wen3earneb3u5neck5negene4lane5mine4mo4nenene4pon2erener4r2nes_4nesp2nest4neswn5even4gabn3gelng5han3gibng1inn5gitn4glangov4ng5shn4gum4n1h4nhab33n4iani3anni4apni3bani4blni5dini4erni2fin5igrnin4g5nis_n4ithni3trn3ketnk3innmet44n1n2nni4vnob4ln5oclnoge4no4mono3mynon5i4noscnos4enos5tno5ta3nounnowl32n1s2ns5abnsid1nsig4n4socns4pen5spinta4bn5tibnti2fnti4pnu5enn3uinnu1men5umi3nu4nnu3troard3oas4eoat5io5barobe4lo2binob3ulocif3o4cilo4codocre3od3icodi3oo2do4odor3o5engoe4tao5geoo4gero3gieog3ito4groogu5i2ogynohab5oiff4o3ingo5ismo3kenok5ieo4lanold1eol3ero3letol4fio3liao5lilo5lioo5livolo4rol5plol3ubol3uno5lusom5ahoma5lom2beom4blo4meto3miao5midom1ino4monom3pion4aco3nanon5doo3nenon4guon1ico3nioon1iso5niuonsu4on5umonva5ood5eood5ioop3io3ordoost5ope5dop1ero3pito5pono5ra_ore5aor3eiorew4or4guo5rilor1ino1rioo3riuor2miorn2eo5rofor5pe3orrhor4seorst4or4tyo5rumos3alos4ceo5scrosi4uos4paos4poos2tao4tano4teso3tifo3tisoto5sou3blou5etoun2dov4eno3visow3elown5ipa4capa4cepac4tpain4pan4apa3nypa4pu3parepa2te3pe4a2p2ed3pede3pedipee4dpe4lap4encpe5onp4erip4ernper3ope5ruper1vph4erph1ic5phie3phiz3phobpho4rpian4pi4cyp5idapi3de5pidi3piecpi3enpi3lop4in_pind4p4ino3pi1opion4p3ithpi2tu2p3k21p2l23planpli3a4pligpli4nploi4plu4m5pod_po5em5po4gpoin2po4ni1p4orpo4rypos1spo4ta5pounp4pedp5pelp3penp3perp3petpre3rpre3vpri4spro3lpro1t2p1s2p4sibpti3mptu4rpul3cpur4r5putepu3trqua5v2que_3quer3quetra3bir5aclraf4tra4lor2amir4anira5norar5crare4rau4tr4babr4bagrbi4fr2binrcen4r3charc4itrcum3r4dalrdi4ardin4re1alre3an5reavre4aw2r2edre1dere2fere3fire4fyre5itre1lire5lure1pur1er4r4erirero4re5rur4es_res2tre4whrg3err3getr3gicrgi4nr5gisr5gitrgo4n4rhalria4bri4agrib3ar4ice4ricir4icori1erri5et5rigirim5i3rimor2inarin4drin4erin4g5riphri2plr4is_ris4cr3ishris4pri2turiv3ir3ketrk4ler2ledr4ligr4lisr3lo4rma5cr3menr4mior3mitr4narr3nelr4nerr5netr3neyr5nicr3nitr3nivr4nourob3lro3crro1ferom4irom4pron4e1room5rootror3iro5roros4sro4tyro4var4pear3petrp4h4rre4crre4fr4reorri4orri4vrron4rros4rrys4r3secrs3esr5sharson3r4tagr3tebrte5ort5ibrti4dr3tigr4tivr3trirt4shru3enru4glru3inrunk5r5uscr3venr3veyr3vicrvi4v2s1ab5sacks3actsal4msa5losal4t3sancsa5tasat3usca4pscav5s4ced4sceis4cess4choscle5s4cliscof4seas4sea5w3sect4s4eds5edlseg3rse1le5self5selv4seme4sencsen4dsen5gs4erlser4os1e4sse5shses5tsew4ish1er5shevsh1insh3io3shipshiv5shon3shor4s5icc5sidisil4e4sily2s1ins2inas3ing5sionsir5as3kets3latsman3smel4s5menso4cesoft35solvsona4son4gsor5csor5dso5vi5spaispa4n2spers2phespho5spil44spios4plys4ponspor44spotssas3s2s5cs3sels5sets4siess4lis2tags2tals4tedste2ws3thes4ti_s5tias1tics4ties3tif5stirs1tles4top4stry4st3wsu1alsu4b3su2g3su5issuit3sum3isyn5o4tacita5do4taf4ta5latal3i4talkta5mota5pltar4a4tarc4taretas4eta5sytaun44teattece45tect2t1edte5dite5gi3tel_teli45tels3tenc3tend1tentte5peter3c1teriter5v4tes_4tessthan44thea3thet4thil4thooti4ab2ti2b4tickt4ico5tidi3tienti5fy5tigu4timp2t1int2ina3tiniti5octi3sa3tisetis4mti5sotis4pti3tltiv4ati3zatlan43tle_3tled2t1n24todoto2grto5icto2matom4bto3my4tono4tonyto2ra5tour4touttra3btras4tre5ftre4m5tria2trimtri4vtro3vtru5itrus44t1s24t3t2t4testu3artu4bi4tuf45tu3i3ture5turitur5otu5ry4t1watwis4type3ty5phua5nauan4iuar2duar3iuar3tu4belu3beru1b4iuci4buc4itucle3ud3erudev4u1dicud5isu5ditu4donud4siu4eneuens4ug5inu1inguir4muita4ula5bulch4u1lenul4giu5lia4ul3mu1l4oul1ti4ultuul5ulum5abum4biunat4un4erun4imu2ninuni3vun3s4un4swu4orsu5piauptu44ura_u4ragu4rasur4beur4fru3rifur1inu3riou1ritur3izur4nouros4ur4peur4piurti4u5sadu5sanus4apus3ciuse5au5siau3sicus5slus1trusur4uta4bu3tat4ute_4utel4utenu4tisu4t1lut5ofuto5gu5tonu4touvac3uva4geval5oval1uva5mova5piv3el_ve4lov4elyv4erdv4e2s4ves_ve4teve4ty5vian5vidivi5gnv2incvin5d4vingvio3lvi1ouvi5rovi3sovi3su4vitivit3r4vityvo4lav5ole5volt3volvvom5ivori4vo4ryvo4taw5ablwag5owait5w5al_war4twas4twa1tewed4nweet3wee5vwel4lwest3win4g3wisewith3wl4eswl3inws4pew5s4txac5ex4agoxer4ixe5roxhil5xi5dix4imexpe3d3yar4yc5erych4eycom4ycot4y4erfympa3yn5icy4o5gy4onsy4pedyper5y4pocyp2tayra5myr5iay3s2eys3io3ysisys3taysur4yt3icz5a2bze3rozo5ol4z1z2',
+		6 : '_am5at_ani5m_an3te_ar4ty_atom5_ba5na_bas4e_be5ra_be3sm_can5c_ce4la_cit5r_de3ra_de3ri_des4c_dumb5_eas3i_el3em_enam3_er4ri_ge5og_han5k_hi3er_hon3o_idol3_in3ci_la4cy_lath5_leg5e_lig5a_mal5o_man5a_mer3c_mon3e_mo3ro_mu5ta_of5te_os4tl_pe5te_pio5n_pre3m_ran4t_rit5u_ros5t_row5d_sci3e_self5_sell5_sing4_ting4_tin5k_ton4a_top5i_tou5s_un3ce_ve5ra_wil5iab5erdab5latab5rogac5ardac5aroa5ceoua5chetac5robact5ifad4dinad5er_ad3icaadi4erad5ranaeri4eag5ellag3onia5guerain5inait5enal3enda5le5oal4ia_al5lev4allica5log_ama5raam5ascam5eraam5ilyami4noamor5iamp5enan3age3analyan3arcanar4ia3natiande4san3disan4dowang5iea4n1ica3niesan3i3fan4imea5nimia5ninean3ishan4kli5annizanoth5an4scoans3poan4surantal4an4tieap5eroa3pherap3itaa3pituap5olaapor5iapos3taps5esar3acta5radearan4gar5av4arbal4ar5easar3enta5ressar5ialar3iana3rietar5o5da5ronias3anta5sia_as3tenasur5aat3ablat3aloat5echat3egoat3en_at3eraater5nat3estath5ema5thenath5omat5i5bat3ituat5ropat4tagat3uraau5sibaut5enave4noav3eraav5ernav5eryavi4erazi4erbarbi5bari4abas4sibbi4nabe5nigbe5strbet5izbi3lizbi5netbi3ogrblath55blespblun4tbol3icbom4bibon5at4b1orabound3broth3bunt4ibus5iebuss4e3butiocab3inca5denca3latcal4lacan4iccan5iscan3izcan4tyca5percar5om4cativcav5alccou3t4ceden2cen4ece5ram3cessic5e4ta4ch3abcheap3che5lo3chemich5enech3er_ch3ers4ch1in5chinici2a5b3cinatcin3emc5ing_4cipic4cista4cisticit3iz5clareco3inccol3orcom5ercop3iccoro3ncras5t5crat_cre3at5criticro4plcrop5ocros4ect5angc5tantc4ticuctim3icu5ity3cultucu5riacuss4icu4tie2d3a4b4dativdeb5itde4bondecan4de4cilde5comdeli4e3demicde5mildemor5de4narde2s5odes3tide3strdev3ild3ge4t1d4i3adi4cam5di3en3dine_di5nizdirt5id4is3t3dles_4dlessdo5lordom5izdo3nat4d5outdrea5rduc5er4duct_4ductsdum4beead5ieea5gereal5ereal3oueam3erear5esear4icear4ileart3eeat5eneath3ie5atife4a3tueav3ene4bel_e4belsecan5cec5ifye5citee4clame4cluse4comme4concec3oraeco5roe4cremec4tanec3ulae4d1ered3icaed5ulo5eficie3fineeg5inge5git5e5instej5udielan4delaxa4el3egae4l1ere3libeel3icae3lierel5ishe3liv3el4label3op_em5anaem3icaem1in2em5ineem5ishe5miss5emnizem5ulaen5amoe4nanten3dicen5eroen5esien5esten3etren5icsen3isheop3areo5rolep5ance3pente4prece4predep3rehe4probep5utaequi3l4erander4chee3realere5coere3iner5el_er3emoer5ena4ereneer3enter5esser3este1ria45ericke3rieneri4erer3inee4rivaer4nis4ernit5ernizer3setert3er5erwaues5canes5ecres5encesh5ene2s5imes4i4ne5skines3olues5onaes3peres4preestan4es3tiges5tim4es2toe3stone5stroes5urreten4dethod3e5tideeti4noet5onaet3ricet5rifet3roget5roseuti5leva2p5ev5astev3ellevel3oe5vengeven4ie5verbew3ingfall5e4fa4mafam5isfar5thfa3thefault5feath3fend5ef5fin_f2f5is2f3ic_f3icanf3icenfi3cer5ficia5ficiefi5delfight5fin2d5f1in3gfis4tif5lessflo3refon4defo5ratfor5ayfore5tfort5afres5cfu4minga5metgan5isga3nizgar5n44gativgel4inge5lisge5lizge4natge5nizgh5out5gicia5gies_g3imen3g4in_gin5ge5g4insglad5ignet4t3g4o4ggondo5go5rizgor5ou4grada3guard5gui5t2g5y3nh3ab4lhala3mhan4cihan4cy5hand_hang5ohan4teha3ranha5rashard3ehar4lehe4canh5ecathe5do5he3l4ihel4lyhen5athera3pher4bahere5ah5erouhe2s5phet4edhimer4hion4ehis3elhlo3rih5odizhol5ar3hol4ehor5atho5rishort3eho5senhouse3hov5elhro3pohu4minhun5kehus3t4h4wart4ian4ti4ativib3eraib5ertib5it_ib5itei2b5rii4car_i4caraic5inaic3ipai2c5ocic3ulaid5ancide3alid5ianidi4aridi5ou5ie5gaien5a4i3entiif5eroiff5en4ific_ig3eraight3iil3a4bi4ladei2l5amila5rail4istill5abim3ageima5ryim5idaimi5lei5miniim3ulai4n3auincel4in3ceri5nessin5genin3ityi4no4c2in4thion3atip4re4iq5uefiq3uidire4dei4rel4iri5deiri3tuir4min5iron_is5hanis3honish5opislan4is4salissen4is4sesis4ta_ist4lyita4bi4ita5mit3erai5teri4i2ticit3icait5illi4tismi4tramit3uativ3elliv3en_iv5il_i5vorei4v3ot5izont4jestyk3en4dk3est_kin4delab3iclan4dllan5etlan4tela5tan4lativla4v4ald4ereld4erile4mat5lene_lera5b3l4erile5sco5less_li4ato5licioli4cor4lict_lid5erlif3erli4gra4l4i4llim4bll4im4p1l4inelin3ealiv3erl3le4nl3le4tl2lin4l5linall5outlm3inglob5al3logiclom3er5lope_lo5rielor5oulos5etloun5dlp5ingltane5ltera4ltur3al5umn_lus3tel5vet4mag5inma3ligma5linmal4limal4ty5maniaman5isman3izma5rizmar4lyma5scema3tismba4t55mediame3diem5e5dymel5onmem1o3men5acmen4demensu5men4tem5ersa3mestimet3alme5thime3try3miliam5ineem4inglmis4timma5rymoi5semon5etmon5gemoni3amo3nizmonol4mo3ny_4mora_mo5seympara5mpar5imphas4mp5iesm4p1inmpo3rim4pousmulti32n1a2bna5liana5mitnanci4nan4itnas5tina3talnau3sen4ces_n5cheon5chiln3chisn5d2ifne4gatnel5iznera5bn4erarn4er5i3neticn5geren3gerini3miz5nine_nis4ta3nition3itorn5keronni3alno3ble4n3o2dnois5ino5l4i3nomicnon4agn5oniznor5abnpre4cnsati4n4s3esnter3snti4ern3tinentu3menuf4fe3nu3itoast5eob3a3bob5ingo3cheto4clamoc3rac5ocritoc3ulao5cureod5dedof5iteofit4to4gatoo5gene1o1giso5g2ly3ognizoic3esoi3deroi5letoi5sonoi3terolass4o3lesco3liceol5id_o3li4fol3ingo5lis_ol3isho5liteolli4eol3umeom3enaom3ic_om3icao5miniomo4geompro53oncilon5eston3keyon4odion3omyonspi4onten4on3t4iontif53operao5phano5pherop3ingo4posio4r3ago5realore5sh4o5riaor3icaor3ityor3ougors5enor3thior3thyo3scopos4i4eos3itoos3ityos5tilos5titot3er_ot5ersoth3i4ot3ic_ot5icao3ticeouch5iover3sov4ertoviti4o5v4olow3derow5est5paganp3agatpan3elpan4typar5dipar5elp4a4ripar4ispa5terpa5thypear4lpedia4ped4icpeli4epe4nanpen4thp4era_p4eragperme5per3tipe5tenpe5tizphar5iphe3noph4es_ph5ing3phone5phonipi4ciepi5thaplas5tpli5erplum4bpo3et55pointpoly5tppa5rapray4e5precipre5copre3empre4lap3rese3press5pri4epris3op3rocapros3ept5a4bput3errach4eraf5firam3etrane5oran4gerap3er3raphyrar5ef4rarilra5vairav3elra5zier5binerch4err4ci4brdi4errd3ingre5arrre4crere3disred5itre4facreg3isren4tere5pinre4spire3strre4terre3trire5utire4valrev3elre5vilrg3ingric5as5ricidri4cierid5erri3encri3entrig5anril3iz5rimanrim4pe5rina_riph5erit3icrit5urriv5elriv3etrk4linrl5ishrm5ersrm3ingr1nis4ro5filro5ker5role_ron4alron4taro3pelrop3icro4therov5elr5pentrp5er_rp3ingrre4strsa5tirse4crrs5er_rse5v2r4si4brtach4rten4dr4tierrtil3irtil4lr4tilyr4tistru3e4lrum3plrun4tyruti5nrvel4irv5er_r5vest5ryngesac3risalar4san4desa5vor3s4cie4scopyse2c3ose4d4ese4molsen5ats5eneds5enin4sentd4sentlsep3a34s1er_4servo5se5umsev3ensh5oldshort53side_5sidessi5diz4signa5sine_sion5a3sitiosk5inesk5ingslith5small35smithso4labsol3d2so3lic3s4on_s5ophyspen4d2s5peo3sphersp5ings5sengs4ses_ssi4erss5ilyssur5astam4i5stands4ta4p5stat_s5terostew5a5stickst3ing5stockstom3a5stone3stores4trads4trays4tridsy5rintai5lotal5enta5logtan4detanta3ta5perta3riz4taticta4turtax4istch5ettead4ite5gerte2ma2tem3at3tenan4tenes5ter3dter3ist3ess_teth5eth3easthe5atthe3isth5ic_th5ica5thinkth5odeti4atot4ic1utim5ul3tine_ti3zen3tles_t5let_to3natto3rietor5izto3wartra5chtraci4trem5i4tricstro5mitron5i4tronytro3sptu4nis2t3up_tur3isu4berou3ble_ud5estud3iedud3iesuen4teuer4ilugh3enuil5izu5lati5ulcheul3derul3ingul5ishul4larul4lisuls5esultra3um4blyumor5oun5ishunt3abun4tesuper5sup3ingupt5ibure5atur4ferurs5erur5tesur3theur4tieus4linuten4i4u1t2iu3tineut3ing5u5tiz2v1a4bvac5ilva5lieva5nizvel3liven3omv5enue5vere_v4erelv3erenv4eresver3ie3versever3thves4tevet3ervi5ali5vide_5vided5vides5vilit4vi4nav3io4rvis3itvor5ab4voteewa5gerwa5verweath3win4dewo5venwrita4xi5mizxpan4dymbol5yn3chryo5netys3icay3thin',
+		7 : '_ad4der_anti5s_ar4tie_aster5_be5sto_but4ti_cam4pe_capa5b_car5ol_de4moi_earth5_gen3t4_hand5i_hero5i_hon5ey_im5pin_lat5er_mag5a5_mar5ti_me5ter_mist5i_muta5b_or5ato_ped5al_pe5tit_re5mit_se5rie_sta5bl_ten5an_tim5o5_under5_ven4dea4lenti5a5lysta4matisa4m5atoan5est_a4pillaar5adisa5ratioar5ativar4chanar5dinear5inat5a5si4ta5ternaat5omizbad5gerban5dagbina5r43bi3tio3bit5uabuf4fercall5incast5ercas5tigccompa55chanic5chine_5cific_5cratic4c3retacul4tiscur5a4b4c5utivdel5i5qdem5ic_de4monsdenti5fdern5izdi4latodrag5on5drupliec5essaec5ifiee4compee4f3ereefor5ese4fuse_el5ativel5ebrae4l5ic_el5igibe4l3ingem5igraem3i3niemoni5oench4erent5age4enthesep5recaep5ti5b4erati_er5encee4sage_e4sagese4sert_e4sertse4servaes5idenes5ignaesis4tees5piraes4si4bestruc5e5titioet5itiv4f3ical4ficatefill5ingani5za4g3o3na5graph_4graphy4gress_hang5erh5a5nizharp5enhar5terhel4lishith5erhro5niziam5eteia4tricic4t3uainer4ari5nite_5initioinsur5aion4eryiphras4iq3ui3t5i5r2izis5itiviso5mer4istral5i5ticki2t5o5mi4v3er_i4vers_iv3o3ro4jestiek5iness4latelilev4er_lev4eralev4ersliar5iz5ligatelink5er5liticalloqui5l3o3nizlo4ratol5ties_5lumnia4matizam4b3ing5metricme5triem5i5liemin5glim5inglymis4er_m5istrymo5lestmon4ismmon4istmpa5rabmula5r4nag5er_ncour5and5est_nge4n4en5o5mizno4rarynov3el3nsta5bln4t3ingo5a5lesoctor5aod5uct_od5uctso2g5a5rog5ativoint5eroist5eno5litiool5ogizom5atizom5erseom5etry5ommend4operagor5alizor5angeor5est_4oscopios5itivo5statiotele4goth5esiounc5erover4nepara5blpar5age5pathicpa4tricpera5blperi5stper4mal5phistipi4grappref5acpre5tenprin4t3prof5itput4tedput4tinration4rb5ing_r5ebratrec5ollre5fer_r4en4tare4posiress5ibre5stalre4ti4zre5versre5vertrev5olurip5licri3ta3br5ited_rit5er_rit5ersr4ming_rom5etero5n4isros5perrtroph45sa3tioscan4t55scin4dscour5asmol5d45sophics5ophizsqual4lsspend4stern5i5stratuta5blestal4listen4tagter5iesteri5za5ternit5thodicthor5ittho5riztill5intion5eeto5cratton4alitrac4ittrac4tetra5ventri5ces5triciatro5pheuar5antu4b5inguiv4er_ul4li4bu4m3ingun4ter_upport5uri4ficus5tereuti5lizution5avar5iedver5encvermi4n4v3idenv3i3lizwea5riewill5inxe4cutoxpecto5ylla5bl',
+		8 : '_chill5i_cor5ner_dictio5_eq5ui5t_for5mer_re5stat_trib5utab5it5abab5o5lizap5illara5rameteation5arces5si5bch5a5nisch5inesse4q3ui3sg5rapher5graphicimenta5rin5dlingin5glinglem5aticl5i5tics5losophyma5chinema5rine_mpos5itenato5mizneg5ativni5ficat5nologisntrol5lioc5ratizonspir5appo5siterec5omper5ev5er_5taboliz5tisticatrav5es5url5ing_',
+		9 : '_ratio5nac5laratioec5ificatef5i5niteep5etitio5losophiz5mocratiz5nop5o5liuto5matic'
+	}
+};
 
+Hyphenator.setLoaded();
 // run the hyphenator
-Hyphenator.hyphenateDocument();
+Hyphenator.run();
 
