@@ -732,37 +732,23 @@ function getTextBosGlobe() {
     var theText = possibleDivs[0];
     return theText;
 }
+
 function getTextLATimes() {
-    var theText = document.body.childNodes[5];
-    theText.setAttribute("style", "");
-    removeIfNotNull(theText.getElementsByTagName("A")[0]);
-    // no idea why, but these HR elements mess things up
-    removeAll(document.body.getElementsByTagName("HR"));
-    // make the paragraphs actually appear in <p> elements    
-    // first, find the paragraphs
-    var parInds = new Array();
-    var tmpInd = 0;
-    for (var i = 0; i < theText.childNodes.length - 2; i++) {
-    	if (theText.childNodes[i].nodeType == 3) {
-    		var nodeVal = theText.childNodes[i].nodeValue;
-    		if (nodeVal.match(/(.*)[a-zA-Z0-9](.*)/)) {
-    			GM_log("found para at index " + i);
-    			parInds[tmpInd] = i;
-    			tmpInd++;
-    		}
-    	}
+    var articleTextDiv = document.getElementsByTagName("DIV")[0];
+    var thePara = articleTextDiv.getElementsByTagName("P")[0];
+    var newDiv = document.createElement("div");
+    for (var i = 0; i < thePara.childNodes.length; i++) {
+        if (thePara.childNodes[i].nodeType == 3) {
+            if (thePara.childNodes[i].nodeValue.match("\s+")) {
+                var newPara = document.createElement("p");
+                newPara.appendChild(thePara.childNodes[i].cloneNode(true));
+                newDiv.appendChild(newPara);
+            }
+        }
     }
-    // stick them in <p> elements    
-    for (var i = parInds.length-1; i >= 0; i--) {
-    	var curParInd = parInds[i];
-    	var theParaText = theText.childNodes[curParInd];
-    	var newPara = document.createElement('p');
-    	theText.replaceChild(newPara, theParaText);
-    	newPara.appendChild(theParaText);
-    }
-    // remove BR elements
-    removeAll(theText.getElementsByTagName("BR"));
-    return theText;
+    thePara.parentNode.replaceChild(newDiv,thePara);
+    removeAll(document.body.getElementsByTagName("IFRAME"));
+    return addChildrenToNewDiv(document.body);
 }
 
 
