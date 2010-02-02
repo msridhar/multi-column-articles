@@ -17,7 +17,7 @@
 // ---------
 // 0.5.2:
 //   - Upgraded to Hyphenator 2.4.0
-//   - Small fixes for NYBooks, The Atlantic.
+//   - Small fixes for NYBooks, The Atlantic, LA Times.
 // 0.5.1:
 //   - Small fixes for NYTimes and The Atlantic.
 // 0.5.0:
