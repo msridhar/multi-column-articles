@@ -882,7 +882,7 @@ if (theText) {
     // for this div just gets moved out to articleTextDiv
     var columnStyleDiv = document.createElement("div");
     columnStyleDiv.setAttribute("id", "columnstyling");
-    columnStyleDiv.setAttribute("style", "-moz-column-width: " + columnWidthEm + "em; -moz-column-gap: " + columnGapEm + "em; text-align:justify;" + extraStyle);
+    columnStyleDiv.setAttribute("style", "-moz-column-width: " + columnWidthEm + "em; -moz-column-gap: " + columnGapEm + "em; -webkit-column-width: " + columnWidthEm + "em; -webkit-column-gap: " + columnGapEm + "em; text-align:justify;" + extraStyle);
     var theFontSize = computeParaFontSize(theText);
     columnStyleDiv.style.fontSize = theFontSize + "px";
 //	GM_log(theFontSize + " font size");
