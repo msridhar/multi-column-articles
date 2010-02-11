@@ -1,0 +1,13 @@
+{
+   "content_scripts": [ {
+      "exclude_globs": [  ],
+      "include_globs": [ "*nytimes.com*/*pagewanted=print*", "http://*.nybooks.com/articles/*", "http://*.newyorker.com/*printable=true*", "http://*.washingtonpost.com/*pf.html", "http://*.latimes.com/*,print.*", "http://*.boston.com/*mode=PF*", "http://*bostonreview.net/BR*", "http://*theatlantic.com/doc/print*", "http://*.printthis.clickability.com/pt/*nymag.com*", "http://*.mercurynews.com/portlet/article/html/fragments/print_article.jsp\\?*", "http://*.slate.com/*action=print*", "http://seattletimes.nwsource.com/*PrintStory.pl*", "http://*.wired.com/*print*", "http://*.wsj.com/*/article_print*", "http://*.foreignaffairs.org/*mode=print*", "http://*.guardian.co.uk/print*", "http://*.wikipedia.org/*printable=yes*", "http://*.sfgate.com/cgi-bin/article.cgi*type=printable*", "http://*.economist.com/*/PrinterFriendly.cfm*", "http://*.bbc.co.uk/*/pagetools/print/*", "*abcnews.go.com/print\\?id=*", "http://*.newsweek.com/*/output/print", "http://*.time.com/*/printout/*" ],
+      "js": [ "multi-column_articles.user.js" ],
+      "matches": [ "http://*/*", "https://*/*" ]
+   } ],
+   "converted_from_user_script": true,
+   "description": "Multi-column articles for several publications",
+   "key": "M0mic1vnQsUpQ5wiB4LjQ1M4kKU2jUwQNEJ0J7U9f4c=",
+   "name": "Multi-column articles",
+   "version": "1.0"
+}
