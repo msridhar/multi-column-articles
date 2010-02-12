@@ -484,12 +484,13 @@ function calculateOffsetsNew(theText, screenWidth) {
 // within the multi-column view
 function computeParaFontSize(theText) {
 	// create a dummy paragraph, to figure out its computed style
-	var dummyPara = document.createElement("p");
-	theText.appendChild(dummyPara);
-	var computedSize = document.defaultView.getComputedStyle(dummyPara, "").getPropertyValue("font-size").replace(/px/,"");
-//	GM_log("computed para size " + computedSize);
-	theText.removeChild(dummyPara);
-	return computedSize;	 		
+    var dummyPara = document.createElement("p");
+    theText.appendChild(dummyPara);
+    var computedStyle = document.defaultView.getComputedStyle(dummyPara, "");
+    var computedSize = computedStyle.getPropertyValue("font-size").replace(/px/,"");
+    //	GM_log("computed para size " + computedSize);
+    theText.removeChild(dummyPara);
+    return computedSize;	 		
 }
 
 // 
@@ -883,6 +884,11 @@ if (theText) {
     var columnStyleDiv = document.createElement("div");
     columnStyleDiv.setAttribute("id", "columnstyling");
     columnStyleDiv.setAttribute("style", "-moz-column-width: " + columnWidthEm + "em; -moz-column-gap: " + columnGapEm + "em; -webkit-column-width: " + columnWidthEm + "em; -webkit-column-gap: " + columnGapEm + "em; text-align:justify;" + extraStyle);
+
+    // make sure to put theText back in the DOM now; otherwise, the call to computeParaFontSize below
+    // may not work
+    articleTextDiv.appendChild(columnStyleDiv);
+    columnStyleDiv.appendChild(theText);
     var theFontSize = computeParaFontSize(theText);
     columnStyleDiv.style.fontSize = theFontSize + "px";
 //	GM_log(theFontSize + " font size");
@@ -890,8 +896,6 @@ if (theText) {
 //    GM_log("column height: " + columnHeightEm);
     columnStyleDiv.style.height = columnHeightEm + "em";
 
-    articleTextDiv.appendChild(columnStyleDiv);
-    columnStyleDiv.appendChild(theText);
 
 	// create div for editing custom style, invisible
 	// until the edit link is clicked
