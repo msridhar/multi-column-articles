@@ -102,6 +102,7 @@
 // @include       *abcnews.go.com/print?id=*
 // @include       http://*.newsweek.com/*/output/print
 // @include       http://*.time.com/*/printout/*
+// @include       http://*.vanityfair.com/*printable=true
 // ==/UserScript==
 
 // 
@@ -548,8 +549,9 @@ function getArticleText() {
         return getTextNewsweek();
     } else if (theURL.match(/time\.com/)) {
         return getTextTime();
+    } else if (theURL.match(/vanityfair\.com/)) {
+        return getTextVanityFair();
     }
-
 }
 
 
@@ -558,6 +560,17 @@ function getArticleText() {
 // D is a child of the document.body node, and
 // (2) reformat the page as needed to make the scrolling
 // view work properly
+
+function getTextVanityFair() {
+    var theText = getElementsByClass('article-text',null,null)[0];
+    removeAll(getElementsByClass('content-supporting',null,null));
+    removeAll(getElementsByClass('tweetmeme',null,null));
+    removeAll(getElementsByClass('inlineimage',null,null));
+    document.body.setAttribute("style", "width:auto;");
+    removeIfNotNull(document.getElementById('header'));
+    removeIfNotNull(document.getElementById('printoptions'));
+    return theText;
+}
 
 function getTextTime() {
     removeIfNotNull(document.getElementById('topBannerWrap'));
