@@ -86,7 +86,7 @@
 // @include       http://*.latimes.com/*,print.*
 // @include       http://*.boston.com/*mode=PF*
 // @include       http://*bostonreview.net/BR*
-// @include       http://*theatlantic.com/doc/print*
+// @include       http://*theatlantic.com/*/print*
 // @include       http://*.printthis.clickability.com/pt/*nymag.com*
 // @include       http://*.mercurynews.com/portlet/article/html/fragments/print_article.jsp?*
 // @include       http://*.slate.com/*action=print*
@@ -709,16 +709,14 @@ function getTextNYMag() {
     return mainDiv;
 }
 function getTextAtlantic() {
-    // remove forms
-    //removeAll(document.body.getElementsByTagName('FORM'));
-    //removeAll(document.body.getElementsByTagName('IMG'));
-    //removeAll(document.body.getElementsByTagName('EMBED'));
-    document.getElementById('container').setAttribute("style", "width:auto;");
-    removeIfNotNull(document.getElementById('header'));
-    removeAll(getElementsByClass('leaderboard-ad',null,null));
-    removeAll(getElementsByClass('BrightcoveExperience',null,null));
-    removeIfNotNull(document.getElementById('copyright'));
-    return document.getElementById('storytop');
+    document.body.style.width = "auto";
+    document.getElementById('container').style.width= "auto";
+    document.getElementById('middle').style.width= "auto";
+    var theText = getElementsByClass('articleText',null,null)[0];
+    removeAll(theText.getElementsByTagName('TABLE'));
+//    removeAll(theText.getElementsByTagName('IMG'));
+    removeIfNotNull(document.getElementById('printFooter'));
+    return theText;
 }
 
 function getTextBosReview() {
