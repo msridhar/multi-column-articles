@@ -792,6 +792,8 @@ function getTextNYTimes() {
     removeIfNotNull(document.getElementById('articleInline'));
     removeAll(getElementsByClass('printInfo',null,null));
     removeAll(theText.getElementsByTagName("OBJECT"));
+    // this sucks; need to handle scrollbars better
+    window.setTimeout(function() { document.body.setAttribute("style", "width:auto"); }, 2000);
     return theText;
 }
 
