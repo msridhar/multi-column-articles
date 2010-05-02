@@ -105,6 +105,53 @@
 // @include       http://*.vanityfair.com/*printable=true
 // ==/UserScript==
 
+// to set things up for Chrome; some GM_* functions are not present there.  
+// In particular, we need GM_setValue and GM_getValue
+// Note that these implementations use local storage, so we can only store 
+// preferences per-site, not globally
+// @copyright      2009, James Campos
+// @license        cc-by-3.0; http://creativecommons.org/licenses/by/3.0/
+if ((typeof GM_getValue == 'undefined') || (GM_getValue('a', 'b') == undefined)) {
+	GM_addStyle = function(css) {
+		var style = document.createElement('style');
+		style.textContent = css;
+		document.getElementsByTagName('head')[0].appendChild(style);
+	}
+
+	GM_deleteValue = function(name) {
+		localStorage.removeItem(name);
+	}
+
+	GM_getValue = function(name, defaultValue) {
+		var value = localStorage.getItem(name);
+		if (!value)
+			return defaultValue;
+		var type = value[0];
+		value = value.substring(1);
+		switch (type) {
+			case 'b':
+				return value == 'true';
+			case 'n':
+				return Number(value);
+			default:
+				return value;
+		}
+	}
+
+	GM_log = function(message) {
+		console.log(message);
+	}
+
+	 GM_registerMenuCommand = function(name, funk) {
+	//todo
+	}
+
+	GM_setValue = function(name, value) {
+		value = (typeof value)[0] + value;
+		localStorage.setItem(name, value);
+	}
+}
+
 // 
 // UTILITY FUNCTIONS
 //
@@ -119,6 +166,24 @@ function addGlobalStyle(css) {
     style.type = 'text/css';
     style.innerHTML = css;
     head.appendChild(style);
+}
+
+// taken from jQuery; wish I could just use jQuery, but it's a pain with Chrome
+function getOffset(elem) {
+    var box = elem.getBoundingClientRect(), doc = elem.ownerDocument, body = document.body, docElem = document.documentElement,
+    clientTop = docElem.clientTop || body.clientTop || 0, clientLeft = docElem.clientLeft || body.clientLeft || 0,
+    top  = box.top  + (elem.pageYOffset || body.scrollTop ) - clientTop,
+    left = box.left + (elem.pageXOffset || body.scrollLeft) - clientLeft;
+//    GM_log("box.left = " + box.left + ", clientLeft = " + clientLeft);
+    return {
+        top: top, left: left
+    };
+}
+
+function getOffsetLeft(elem) {
+    
+    return getOffset(elem).left;
+    //return elem.offsetLeft;
 }
 
 // from the web; compute the absolute position of an
@@ -380,13 +445,16 @@ function calculateOffsetsNew(theText, screenWidth) {
 	var computeMedianColumnWidth = function(theText) {
 		var diffs = new Array();
 		var lastOffset = -10000000;
-		var theTextOffset = theText.offsetLeft;
 		var paras = document.evaluate('//p|//div[@id=\'brpadding\']', theText, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
 		var curPara = paras.iterateNext();
+                // getting the offset of the text div doesn't seem to work right with Chrome, hence
+                // we just use the offset of the first paragraph
+//		var theTextOffset = getOffsetLeft(theText);
+                var theTextOffset = getOffsetLeft(curPara);
 		var diffInd = 0;
 		while (curPara) {
-			if (typeof(curPara.offsetLeft) != "undefined") {
-				var curOffset = curPara.offsetLeft - theTextOffset;
+			if (typeof(getOffsetLeft(curPara)) != "undefined") {
+				var curOffset = getOffsetLeft(curPara) - theTextOffset;
 				if (curOffset > lastOffset) { // fudge factor
 					//GM_log("offset for next column is " + curOffset);
 					if (lastOffset != -10000000) {
@@ -414,7 +482,6 @@ function calculateOffsetsNew(theText, screenWidth) {
 	var offsets = new Array();
 	var curPage = 0;
 	var lastOffset = -10000000;
-	var theTextOffset = theText.offsetLeft;
 	var debug = false;
 	var setNextPageOffset = function(nextOffset) { 
 		if (debug) {
@@ -431,12 +498,16 @@ function calculateOffsetsNew(theText, screenWidth) {
 	// handle final columns
 	var paras = document.evaluate('//p|//div[@id=\'brpadding\']', theText, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
 	var curPara = paras.iterateNext();
+        // getting the offset of the text div doesn't seem to work right with Chrome, hence
+        // we just use the offset of the first paragraph
+//	var theTextOffset = getOffsetLeft(theText);
+        var theTextOffset = getOffsetLeft(curPara);
 	while (curPara) {
-		if (typeof(curPara.offsetLeft) != "undefined"
+		if (typeof(getOffsetLeft(curPara)) != "undefined"
 		    && curPara.parentNode.tagName != 'BLOCKQUOTE') { // bit of a hack...
-			var curOffset = curPara.offsetLeft - theTextOffset;
+			var curOffset = getOffsetLeft(curPara) - theTextOffset;
 			if (debug) {
-				GM_log("cur para offset: " + curPara.offsetLeft);
+				GM_log("cur para offset: " + getOffsetLeft(curPara));
 				GM_log("cur para absolute offset: " + getAbsolutePosition(curPara).x);
 			}
 			if (curOffset > lastOffset) {
