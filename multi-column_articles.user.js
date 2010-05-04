@@ -168,7 +168,8 @@ function addGlobalStyle(css) {
     head.appendChild(style);
 }
 
-// taken from jQuery; wish I could just use jQuery, but it's a pain with Chrome
+// edited version of what's in jQuery
+// wish I could just use jQuery, but it's a pain with Chrome
 function getOffset(elem) {
     var box = elem.getBoundingClientRect(), doc = elem.ownerDocument, body = document.body, docElem = document.documentElement,
     clientTop = docElem.clientTop || body.clientTop || 0, clientLeft = docElem.clientLeft || body.clientLeft || 0,
@@ -1064,6 +1065,8 @@ if (theText) {
     
     // add keyboard listener
     window.addEventListener('keypress', pressedKey, false);
+
+    window.addEventListener('keydown', pressedKey, false);
 
     // just re-load the whole page on a resize for now
     window.addEventListener('resize', function(e) { window.location.href = window.location.href; }, true);
